@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube Video Downloader</h1>
+        <p>유튜브 동영상 링크를 아래에 붙여넣고 다운로드 버튼을 누르세요.</p>
+        <div class="input-container">
+            <input type="text" id="youtube-url" placeholder="https="//www.youtube.com/watch?v=..."">
+            <button id="download-btn">다운로드</button>
+        </div>
+        <div id="loading" class="hidden">
+            <div class="spinner"></div>
+            <p>다운로드 중...</p>
+        </div>
+        <div id="result" class="hidden">
+            <p id="video-title"></p>
+            <a id="download-link" href="" download>다운로드 링크</a>
+        </div>
+        <div id="error" class="hidden">
+            <p id="error-message"></p>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

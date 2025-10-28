@@ -1,0 +1,1 @@
+- @youtube_search_viewer_v0.1.py에서 gemini STT로 audio파일에서 회의록 대화록을 추출하는 시간을 csv에 저장해줘.
