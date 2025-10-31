@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(tree:*)",
+      "Bash(awk:*)",
+      "Bash(for file in change_name.png chat_icon.png current_icon.png result.png save_busson.png videoInfo.png)",
+      "Bash(do [ -f \"$file\" ])",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "Bash(timeout 10 python:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": []

@@ -510,7 +510,7 @@ header p {
     animation: fadeIn 0.3s ease-out;
 }
 
-/* ===== v0.2 새로운 스타일: 요약 및 채팅 ===== */
+/* ===== v0.3 새로운 스타일: 요약 및 채팅 ===== */
 
 /* 메인 레이아웃: 왼쪽 67% | 오른쪽 33% */
 .main-layout-grid {
@@ -594,7 +594,9 @@ header p {
 .summary-content {
     padding: 20px;
     overflow-y: auto;
-    flex: 1;
+    height: 500px;
+    min-height: 500px;
+    max-height: 500px;
     font-size: 0.9rem;
     line-height: 1.8;
 }

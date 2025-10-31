@@ -1,0 +1,3192 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 영상/오디오 검색 엔진 v0.3</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- YouTube IFrame Player API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <style>
+        /* 탭 스타일 */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .tab-button {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: all 0.3s ease;
+        }
+
+        .tab-button:hover {
+            color: var(--primary-color);
+            background: rgba(var(--primary-rgb), 0.05);
+        }
+
+        .tab-button.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 오디오 업로드 영역 스타일 */
+        .file-upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            background: var(--bg-secondary);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .file-upload-area:hover {
+            border-color: var(--primary-color);
+            background: rgba(var(--primary-rgb), 0.05);
+        }
+
+        .file-upload-area.drag-over {
+            border-color: var(--primary-color);
+            background: rgba(var(--primary-rgb), 0.1);
+        }
+
+        .file-upload-icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+        }
+
+        .file-upload-text {
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .file-upload-hint {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .file-info {
+            display: none;
+            margin-top: 20px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .file-info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .file-info-item:last-child {
+            margin-bottom: 0;
+        }
+
+        /* 오디오 플레이어 스타일 */
+        .audio-player-wrapper {
+            margin-top: 20px;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+        }
+
+        .audio-player-wrapper audio {
+            width: 100%;
+            height: 54px;
+        }
+
+        /* 오디오 탭 전용 레이아웃 - 플레이어 없이 간결하게 */
+        .audio-viewer-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+            align-items: start;
+            height: 800px; /* 명확한 높이 설정 */
+        }
+
+        .audio-left-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            height: 100%;
+        }
+
+        /* 오디오 탭의 회의록 컨테이너가 왼쪽(요약+채팅)과 같은 높이 사용 */
+        .audio-viewer-layout .transcript-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            max-height: 800px;
+        }
+
+        .audio-viewer-layout .transcript-header {
+            flex-shrink: 0; /* 헤더는 고정 크기 */
+        }
+
+        .audio-viewer-layout .transcript-content {
+            flex: 1;
+            overflow-y: auto !important;
+            overflow-x: hidden;
+            min-height: 0;
+            height: auto !important;
+            max-height: calc(800px - 80px); /* 전체 높이 - 헤더 높이 */
+        }
+
+        /* 요약과 채팅 컨테이너도 스크롤 가능하게 */
+        .audio-viewer-layout .summary-container,
+        .audio-viewer-layout .chat-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .audio-viewer-layout .summary-content {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .audio-viewer-layout .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        /* 오디오/영상 재생 중 현재 대화 하이라이트 */
+        .transcript-segment.active-audio {
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0.15) 100%) !important;
+            border-left: 6px solid #2563eb !important;
+            padding-left: 15px !important;
+            margin-left: -10px !important;
+            transition: all 0.2s ease !important;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+            transform: scale(1.02) !important;
+        }
+
+        .transcript-segment.active-audio .segment-header {
+            color: #1d4ed8 !important;
+            font-weight: 700 !important;
+        }
+
+        .transcript-segment.active-audio .segment-time {
+            color: #2563eb !important;
+            font-weight: 700 !important;
+            background: rgba(59, 130, 246, 0.15);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        /* 모바일 반응형 디자인 */
+        @media (max-width: 968px) {
+            /* 오디오 뷰어 레이아웃을 세로로 변경 */
+            .audio-viewer-layout {
+                display: flex !important;
+                flex-direction: column !important;
+                height: auto !important;
+                gap: 20px;
+            }
+
+            .audio-viewer-layout .transcript-container {
+                height: auto !important;
+                max-height: 600px !important;
+                order: 1; /* 회의록을 맨 위로 */
+            }
+
+            .audio-left-section {
+                order: 2; /* 요약+채팅을 아래로 */
+            }
+
+            .audio-viewer-layout .transcript-content {
+                max-height: 500px !important;
+            }
+
+            .audio-viewer-layout .summary-container,
+            .audio-viewer-layout .chat-container {
+                height: 400px !important;
+            }
+        }
+
+        @media (max-width: 768px) {
+            /* 모바일 최적화 */
+            .audio-viewer-layout {
+                display: flex !important;
+                flex-direction: column !important;
+                height: auto !important;
+            }
+
+            .audio-viewer-layout .transcript-container {
+                height: auto !important;
+                max-height: 500px !important;
+                order: 1; /* 회의록을 맨 위로 */
+            }
+
+            .audio-left-section {
+                order: 2; /* 요약+채팅을 아래로 */
+            }
+
+            .audio-viewer-layout .transcript-content {
+                max-height: 400px !important;
+            }
+
+            .audio-viewer-layout .summary-container,
+            .audio-viewer-layout .chat-container {
+                height: 350px !important;
+            }
+
+            /* 오디오 정보 최적화 */
+            .video-info {
+                font-size: 0.85rem !important;
+                padding: 15px !important;
+            }
+
+            .info-row {
+                flex-direction: column !important;
+                gap: 8px !important;
+            }
+        }
+
+        @media (max-width: 480px) {
+            /* 소형 모바일 */
+            .audio-viewer-layout .transcript-container {
+                max-height: 400px !important;
+            }
+
+            .audio-viewer-layout .transcript-content {
+                max-height: 350px !important;
+            }
+
+            .audio-viewer-layout .summary-container,
+            .audio-viewer-layout .chat-container {
+                height: 300px !important;
+            }
+
+            /* 세그먼트 텍스트 크기 조정 */
+            .transcript-segment {
+                padding: 10px !important;
+                font-size: 0.9rem !important;
+            }
+        }
+
+        /* 마크다운 콘텐츠 스타일 */
+        .markdown-content {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3,
+        .markdown-content h4,
+        .markdown-content h5,
+        .markdown-content h6 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            line-height: 1.25;
+            color: var(--text-primary);
+        }
+
+        .markdown-content h1 {
+            font-size: 2em;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .markdown-content h2 {
+            font-size: 1.5em;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .markdown-content h3 {
+            font-size: 1.25em;
+        }
+
+        .markdown-content p {
+            margin-top: 0;
+            margin-bottom: 16px;
+            line-height: 1.8;
+        }
+
+        .markdown-content ul,
+        .markdown-content ol {
+            margin-top: 0;
+            margin-bottom: 16px;
+            padding-left: 2em;
+        }
+
+        .markdown-content li {
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+
+        .markdown-content li > p {
+            margin-bottom: 8px;
+        }
+
+        .markdown-content code {
+            padding: 2px 6px;
+            background: rgba(var(--primary-rgb), 0.1);
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        .markdown-content pre {
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+        }
+
+        .markdown-content pre code {
+            padding: 0;
+            background: none;
+            border-radius: 0;
+        }
+
+        .markdown-content blockquote {
+            margin: 0 0 16px 0;
+            padding: 0 16px;
+            border-left: 4px solid var(--primary-color);
+            color: var(--text-secondary);
+        }
+
+        .markdown-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 16px;
+        }
+
+        .markdown-content table th,
+        .markdown-content table td {
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .markdown-content table th {
+            background: var(--bg-secondary);
+            font-weight: 600;
+        }
+
+        .markdown-content a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .markdown-content a:hover {
+            text-decoration: underline;
+        }
+
+        .markdown-content strong {
+            font-weight: 600;
+        }
+
+        .markdown-content em {
+            font-style: italic;
+        }
+
+        .markdown-content hr {
+            height: 1px;
+            padding: 0;
+            margin: 24px 0;
+            background-color: var(--border-color);
+            border: 0;
+        }
+
+        .markdown-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 -->
+        <header>
+            <h1><span class="film-icon">🎬</span> 영상/오디오 검색 엔진 v0.2</h1>
+        </header>
+
+        <!-- 탭 네비게이션 -->
+        <div class="tabs">
+            <button class="tab-button active" data-tab="video-tab">
+                🎬 영상 검색
+            </button>
+            <button class="tab-button" data-tab="audio-tab">
+                🎵 오디오 검색
+            </button>
+            <button class="tab-button" data-tab="retriever-tab">
+                🔍 Retriever 검색
+            </button>
+            <button class="tab-button" data-tab="ask-content-tab">
+                💬 내용 질문
+            </button>
+            <button class="tab-button" data-tab="data-management-tab">
+                🗂️ 데이터 관리
+            </button>
+        </div>
+
+        <!-- ========== 영상 검색 탭 ========== -->
+        <div id="video-tab" class="tab-content active">
+            <!-- YouTube URL 입력 섹션 -->
+            <section class="upload-section" id="videoUploadSection">
+                <div class="upload-card">
+                    <h2>🔗 YouTube URL 입력</h2>
+                    <p class="description">YouTube 영상 URL을 입력하면 자동으로 다운로드하여 회의록을 생성합니다</p>
+
+                    <form id="youtubeForm">
+                        <div class="form-group">
+                            <label for="youtubeUrl">YouTube URL</label>
+                            <input
+                                type="text"
+                                id="youtubeUrl"
+                                name="youtube_url"
+                                placeholder="https://www.youtube.com/watch?v=..."
+                                required
+                                style="width: 100%; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem;"
+                            >
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="videoSubmitBtn">
+                            <span class="btn-icon">🎤</span>
+                            <span id="videoSubmitBtnText">영상 처리 시작</span>
+                        </button>
+                    </form>
+
+                    <div id="videoUploadStatus" class="upload-status"></div>
+
+                    <!-- 진행 상황 표시 -->
+                    <div id="videoProgressSection" class="progress-section" style="display: none;">
+                        <div class="progress-item">
+                            <div class="progress-label">
+                                <span>🎵 오디오 다운로드 & MP3 변환</span>
+                                <span id="videoDownloadProgress">0%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="videoDownloadProgressBar" class="progress-fill"></div>
+                            </div>
+                            <div id="videoDownloadMessage" class="progress-message">대기 중...</div>
+                        </div>
+
+                        <div class="progress-item">
+                            <div class="progress-label">
+                                <span>🎤 회의록 생성 (STT)</span>
+                                <span id="videoSttProgress">0%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="videoSttProgressBar" class="progress-fill"></div>
+                            </div>
+                            <div id="videoSttMessage" class="progress-message">대기 중...</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 영상 뷰어 섹션 -->
+            <section class="viewer-section" id="videoViewerSection" style="display: none;">
+                <!-- 영상 정보 -->
+                <div class="audio-player-container">
+                    <div class="audio-header">
+                        <h2>📹 영상 정보</h2>
+                        <button id="changeVideoBtn" class="btn-change-file" title="다른 영상 처리">
+                            🔗 URL 변경
+                        </button>
+                    </div>
+                    <div class="video-info" id="videoInfo"></div>
+                </div>
+
+                <!-- 메인 레이아웃: 플레이어+요약/채팅 (왼쪽 67%) | 회의록 (오른쪽 33%) -->
+                <div class="main-layout-grid">
+                    <!-- 왼쪽 영역: YouTube 플레이어 + 요약/채팅 -->
+                    <div class="left-section">
+                        <!-- YouTube 플레이어 -->
+                        <div class="youtube-player-container">
+                            <div class="audio-header">
+                                <h2>🎬 YouTube 플레이어</h2>
+                            </div>
+                            <div id="youtubePlayerWrapper">
+                                <div id="youtubePlayer"></div>
+                            </div>
+                            <div class="player-info">
+                                <span id="videoCurrentTime">00:00</span> / <span id="videoDuration">00:00</span>
+                            </div>
+                        </div>
+
+                        <!-- 제목 입력 영역 -->
+                        <div class="audio-player-container" style="margin-top: 10px;">
+                            <label for="videoTitleInput" style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-primary);">
+                                📝 제목 입력 (회의록과 요약을 VectorStore에 저장할 때 메타데이터로 추가됩니다)
+                            </label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input
+                                    type="text"
+                                    id="videoTitleInput"
+                                    placeholder="회의록 제목을 입력하세요..."
+                                    style="flex: 1; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem;"
+                                >
+                                <button id="saveVideoTitleBtn" class="btn-primary" style="flex: 0 0 auto; width: auto !important; padding: 10px 16px; white-space: nowrap; font-size: 0.9rem;">
+                                    저장
+                                </button>
+                            </div>
+                            <div id="videoTitleStatus" style="margin-top: 8px; font-size: 0.9rem;"></div>
+                        </div>
+
+                        <!-- 요약 및 채팅 영역 -->
+                        <div class="bottom-content-grid">
+                            <!-- 요약 섹션 -->
+                            <div class="summary-container">
+                                <div class="summary-header">
+                                    <h2>📋 소주제별 요약</h2>
+                                    <button id="videoGenerateSummaryBtn" class="btn-primary">요약 생성</button>
+                                </div>
+                                <div id="videoSummaryContent" class="summary-content">
+                                    <p class="summary-placeholder">요약 생성 버튼을 클릭하세요</p>
+                                </div>
+                                <div id="videoSummaryLoading" class="loading-indicator" style="display: none;">
+                                    <span class="spinner"></span> 요약 생성 중...
+                                </div>
+                            </div>
+
+                            <!-- 채팅 섹션 -->
+                            <div class="chat-container">
+                                <div class="chat-header">
+                                    <h2>💬 AI 채팅</h2>
+                                    <button id="videoClearChatBtn" class="btn-clear-chat" title="대화 초기화">🗑️</button>
+                                </div>
+                                <div id="videoChatMessages" class="chat-messages">
+                                    <div class="chat-welcome">
+                                        회의록 내용에 대해 질문해보세요!
+                                    </div>
+                                </div>
+                                <div class="chat-input-container">
+                                    <textarea
+                                        id="videoChatInput"
+                                        class="chat-input"
+                                        placeholder="질문을 입력하세요..."
+                                        rows="2"
+                                    ></textarea>
+                                    <button id="videoSendChatBtn" class="btn-send-chat">
+                                        <img src="{{ url_for('static', filename='images/chat_icon.png') }}?v=2" alt="Send" class="btn-icon-img">
+                                    </button>
+                                </div>
+                                <div id="videoChatLoading" class="loading-indicator" style="display: none;">
+                                    <span class="spinner"></span> 응답 생성 중...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 오른쪽 영역: 회의록 (33%) -->
+                    <div class="right-section">
+                        <div class="transcript-container">
+                            <div class="transcript-header">
+                                <h2>📝 회의록</h2>
+                                <div class="controls">
+                                    <button id="videoAutoScrollToggle" class="btn-secondary active">자동 스크롤: ON</button>
+                                    <span id="videoSegmentInfo">총 0개 세그먼트</span>
+                                </div>
+                            </div>
+                            <div id="videoTranscriptContent" class="transcript-content"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VectorStore 저장 버튼 -->
+                <div class="audio-player-container" style="margin-top: 20px;">
+                    <div style="text-align: center; padding: 20px; background: var(--bg-secondary); border-radius: 12px; border: 2px solid var(--primary-color);">
+                        <h3 style="margin-bottom: 16px; color: var(--primary-color);">📦 VectorStore 저장</h3>
+                        <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9rem;">
+                            제목과 요약을 입력한 후 아래 버튼을 클릭하여 VectorStore에 저장하세요.
+                        </p>
+                        <button id="saveVideoToVectorstoreBtn" class="btn-primary" style="padding: 16px 32px; font-size: 1.1rem;">
+                            💾 VectorStore에 저장
+                        </button>
+                        <div id="videoVectorstoreSaveStatus" style="margin-top: 12px; font-size: 0.9rem;"></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ========== 오디오 검색 탭 ========== -->
+        <div id="audio-tab" class="tab-content">
+            <!-- 오디오 파일 업로드 섹션 -->
+            <section class="upload-section" id="audioUploadSection">
+                <div class="upload-card">
+                    <h2>📁 오디오 파일 업로드</h2>
+                    <p class="description">오디오 파일을 업로드하면 자동으로 회의록을 생성합니다</p>
+
+                    <form id="audioForm">
+                        <!-- 파일 업로드 영역 -->
+                        <div class="file-upload-area" id="fileUploadArea">
+                            <div class="file-upload-icon">📁</div>
+                            <div class="file-upload-text">파일을 드래그하거나 클릭하여 선택하세요</div>
+                            <div class="file-upload-hint">지원 형식: MP3, WAV, M4A, FLAC, OGG (최대 500MB)</div>
+                            <input type="file" id="audioFileInput" accept="audio/*,video/*" style="display: none;">
+                        </div>
+
+                        <!-- 선택된 파일 정보 -->
+                        <div class="file-info" id="fileInfo">
+                            <div class="file-info-item">
+                                <strong>파일명:</strong>
+                                <span id="fileName">-</span>
+                            </div>
+                            <div class="file-info-item">
+                                <strong>파일 크기:</strong>
+                                <span id="fileSize">-</span>
+                            </div>
+                            <div class="file-info-item">
+                                <strong>파일 형식:</strong>
+                                <span id="fileType">-</span>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="audioSubmitBtn" disabled>
+                            <span class="btn-icon">🎤</span>
+                            오디오 처리 시작
+                        </button>
+                    </form>
+
+                    <div id="audioUploadStatus" class="upload-status"></div>
+
+                    <!-- 진행 상황 표시 -->
+                    <div id="audioProgressSection" class="progress-section" style="display: none;">
+                        <div class="progress-item">
+                            <div class="progress-label">
+                                <span>🎤 회의록 생성 (STT)</span>
+                                <span id="audioSttProgress">0%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="audioSttProgressBar" class="progress-fill"></div>
+                            </div>
+                            <div id="audioSttMessage" class="progress-message">대기 중...</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 오디오 뷰어 섹션 -->
+            <section class="viewer-section" id="audioViewerSection" style="display: none;">
+                <!-- 오디오 정보 -->
+                <div class="audio-player-container">
+                    <div class="audio-header">
+                        <h2>🎵 오디오 정보</h2>
+                        <button id="changeAudioBtn" class="btn-change-file" title="다른 오디오 업로드">
+                            📁 파일 변경
+                        </button>
+                    </div>
+                    <div class="video-info" id="audioContentInfo"></div>
+                </div>
+
+                <!-- 오디오 플레이어 -->
+                <div class="audio-player-container">
+                    <div class="audio-header">
+                        <h2>🎵 오디오 플레이어</h2>
+                    </div>
+                    <div class="audio-player-wrapper">
+                        <audio id="audioPlayer" controls style="width: 100%;">
+                            Your browser does not support the audio element.
+                        </audio>
+                    </div>
+                </div>
+
+                <!-- 제목 입력 영역 -->
+                <div class="audio-player-container" style="margin-top: 10px;">
+                    <label for="audioTitleInput" style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-primary);">
+                        📝 제목 입력 (회의록과 요약을 VectorStore에 저장할 때 메타데이터로 추가됩니다)
+                    </label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input
+                            type="text"
+                            id="audioTitleInput"
+                            placeholder="회의록 제목을 입력하세요..."
+                            style="flex: 1; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem;"
+                        >
+                        <button id="saveAudioTitleBtn" class="btn-primary" style="flex: 0 0 auto; width: auto !important; padding: 10px 16px; white-space: nowrap; font-size: 0.9rem;">
+                            저장
+                        </button>
+                    </div>
+                    <div id="audioTitleStatus" style="margin-top: 8px; font-size: 0.9rem;"></div>
+                </div>
+
+                <!-- 오디오 전용 레이아웃: 요약/채팅 (왼쪽) | 회의록 (오른쪽) -->
+                <div class="audio-viewer-layout">
+                    <!-- 왼쪽: 요약 + 채팅 -->
+                    <div class="audio-left-section">
+                        <!-- 요약 섹션 -->
+                        <div class="summary-container">
+                            <div class="summary-header">
+                                <h2>📋 소주제별 요약</h2>
+                                <button id="audioGenerateSummaryBtn" class="btn-primary">요약 생성</button>
+                            </div>
+                            <div id="audioSummaryContent" class="summary-content">
+                                <p class="summary-placeholder">요약 생성 버튼을 클릭하세요</p>
+                            </div>
+                            <div id="audioSummaryLoading" class="loading-indicator" style="display: none;">
+                                <span class="spinner"></span> 요약 생성 중...
+                            </div>
+                        </div>
+
+                        <!-- 채팅 섹션 -->
+                        <div class="chat-container">
+                            <div class="chat-header">
+                                <h2>💬 AI 채팅</h2>
+                                <button id="audioClearChatBtn" class="btn-clear-chat" title="대화 초기화">🗑️</button>
+                            </div>
+                            <div id="audioChatMessages" class="chat-messages">
+                                <div class="chat-welcome">
+                                    회의록 내용에 대해 질문해보세요!
+                                </div>
+                            </div>
+                            <div class="chat-input-container">
+                                <textarea
+                                    id="audioChatInput"
+                                    class="chat-input"
+                                    placeholder="질문을 입력하세요..."
+                                    rows="2"
+                                ></textarea>
+                                <button id="audioSendChatBtn" class="btn-send-chat">
+                                    <img src="{{ url_for('static', filename='images/chat_icon.png') }}?v=2" alt="Send" class="btn-icon-img">
+                                </button>
+                            </div>
+                            <div id="audioChatLoading" class="loading-indicator" style="display: none;">
+                                <span class="spinner"></span> 응답 생성 중...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 오른쪽: 회의록 -->
+                    <div class="transcript-container">
+                        <div class="transcript-header">
+                            <h2>📝 회의록</h2>
+                            <div class="controls">
+                                <button id="audioAutoScrollToggle" class="btn-secondary active">자동 스크롤: ON</button>
+                                <span id="audioSegmentInfo">총 0개 세그먼트</span>
+                            </div>
+                        </div>
+                        <div id="audioTranscriptContent" class="transcript-content"></div>
+                    </div>
+                </div>
+
+                <!-- VectorStore 저장 버튼 -->
+                <div class="audio-player-container" style="margin-top: 20px;">
+                    <div style="text-align: center; padding: 20px; background: var(--bg-secondary); border-radius: 12px; border: 2px solid var(--primary-color);">
+                        <h3 style="margin-bottom: 16px; color: var(--primary-color);">📦 VectorStore 저장</h3>
+                        <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9rem;">
+                            제목과 요약을 입력한 후 아래 버튼을 클릭하여 VectorStore에 저장하세요.
+                        </p>
+                        <button id="saveAudioToVectorstoreBtn" class="btn-primary" style="padding: 16px 32px; font-size: 1.1rem;">
+                            💾 VectorStore에 저장
+                        </button>
+                        <div id="audioVectorstoreSaveStatus" style="margin-top: 12px; font-size: 0.9rem;"></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ========== Retriever 검색 탭 ========== -->
+        <div id="retriever-tab" class="tab-content">
+            <!-- Retriever 검색 섹션 -->
+            <section class="upload-section">
+                <div class="upload-card">
+                    <h2>🔍 VectorStore 검색</h2>
+                    <p class="description">YouTube 및 오디오 VectorStore에서 관련 회의록을 검색합니다</p>
+
+                    <form id="retrieverForm">
+                        <div class="form-group">
+                            <label for="retrieverQuery">검색어</label>
+                            <input
+                                type="text"
+                                id="retrieverQuery"
+                                name="query"
+                                placeholder="검색할 내용을 입력하세요..."
+                                required
+                                style="width: 100%; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem;"
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label>검색 대상 선택</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="source_type" value="all" checked>
+                                    <span class="radio-text">
+                                        <strong>전체 검색</strong>
+                                        <small>YouTube + Audio 모두 검색</small>
+                                    </span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="source_type" value="summary">
+                                    <span class="radio-text">
+                                        <strong>요약 검색</strong>
+                                        <small>회의 요약만 검색</small>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="retrieverResults">검색 결과 수</label>
+                            <select id="retrieverResults" name="n_results" style="width: 100%; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem;">
+                                <option value="1">1개</option>
+                                <option value="2">2개</option>
+                                <option value="5" selected>5개</option>
+                                <option value="10">10개</option>
+                                <option value="15">15개</option>
+                                <option value="20">20개</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="btn-primary">
+                            <span class="btn-icon">🔍</span>
+                            검색
+                        </button>
+                    </form>
+
+                    <div id="retrieverStatus" class="upload-status"></div>
+                </div>
+            </section>
+
+            <!-- 검색 결과 섹션 -->
+            <section class="viewer-section" id="retrieverResultsSection" style="display: none;">
+                <!-- 플레이어 영역 -->
+                <div id="retrieverPlayerSection" style="display: none; margin-bottom: 20px;">
+                    <div class="audio-player-container">
+                        <div class="audio-header">
+                            <h2 id="retrieverPlayerTitle">🎵 플레이어</h2>
+                            <button id="retrieverClosePlayerBtn" class="btn-secondary" style="padding: 8px 16px;">
+                                ✕ 닫기
+                            </button>
+                        </div>
+
+                        <!-- YouTube 플레이어 -->
+                        <div id="retrieverYoutubePlayerWrapper" style="display: none;">
+                            <div id="retrieverYoutubePlayer"></div>
+                            <div class="player-info" style="margin-top: 10px;">
+                                <span id="retrieverVideoCurrentTime">00:00</span> / <span id="retrieverVideoDuration">00:00</span>
+                            </div>
+                        </div>
+
+                        <!-- 오디오 플레이어 -->
+                        <div id="retrieverAudioPlayerWrapper" class="audio-player-wrapper" style="display: none;">
+                            <audio id="retrieverAudioPlayer" controls style="width: 100%;">
+                                Your browser does not support the audio element.
+                            </audio>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="transcript-container" style="max-height: none; height: auto;">
+                    <div class="transcript-header">
+                        <h2>📊 검색 결과</h2>
+                        <div class="controls">
+                            <span id="retrieverResultInfo">검색 결과: 0개</span>
+                        </div>
+                    </div>
+                    <div id="retrieverResultsContent" class="transcript-content" style="max-height: none; height: auto; min-height: 400px;">
+                        <!-- 검색 결과가 여기에 표시됩니다 -->
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ========== 내용 질문 탭 ========== -->
+        <div id="ask-content-tab" class="tab-content">
+            <!-- 질문 입력 섹션 -->
+            <section class="upload-section">
+                <div class="upload-card">
+                    <h2>💬 내용 질문 (RAG)</h2>
+                    <p class="description">VectorStore에서 관련 내용을 검색하여 AI가 답변합니다</p>
+
+                    <form id="askContentForm">
+                        <div class="form-group">
+                            <label for="contentQuestion">질문</label>
+                            <textarea
+                                id="contentQuestion"
+                                name="question"
+                                placeholder="회의록 내용에 대해 질문하세요..."
+                                required
+                                style="width: 100%; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem; min-height: 100px; resize: vertical;"
+                            ></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label>검색 설정</label>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div>
+                                    <label for="transcriptCount" style="font-size: 0.9rem; color: var(--text-secondary);">
+                                        전체 검색 개수
+                                    </label>
+                                    <select id="transcriptCount" name="transcript_n" style="width: 100%; padding: 10px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem; margin-top: 5px;">
+                                        <option value="1">1개</option>
+                                        <option value="2">2개</option>
+                                        <option value="3">3개</option>
+                                        <option value="5" selected>5개</option>
+                                        <option value="10">10개</option>
+                                    </select>
+                                    <small style="color: var(--text-secondary); display: block; margin-top: 5px;">
+                                        회의록 전체에서 검색
+                                    </small>
+                                </div>
+                                <div>
+                                    <label for="summaryCount" style="font-size: 0.9rem; color: var(--text-secondary);">
+                                        요약 검색 개수
+                                    </label>
+                                    <select id="summaryCount" name="summary_n" style="width: 100%; padding: 10px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem; margin-top: 5px;">
+                                        <option value="1">1개</option>
+                                        <option value="2">2개</option>
+                                        <option value="3">3개</option>
+                                        <option value="5" selected>5개</option>
+                                        <option value="10">10개</option>
+                                    </select>
+                                    <small style="color: var(--text-secondary); display: block; margin-top: 5px;">
+                                        회의 요약에서 검색
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="askContentBtn">
+                            <span class="btn-icon">💬</span>
+                            <span id="askContentBtnText">질문하기</span>
+                        </button>
+                    </form>
+
+                    <div id="askContentStatus" class="upload-status"></div>
+                </div>
+            </section>
+
+            <!-- 답변 표시 섹션 -->
+            <section class="viewer-section" id="askContentAnswerSection" style="display: none;">
+                <div class="transcript-box">
+                    <div class="transcript-header">
+                        <h2>💡 답변</h2>
+                        <div class="controls">
+                            <span id="askContentResultInfo">검색: 전체 0개, 요약 0개</span>
+                        </div>
+                    </div>
+                    <div id="askContentAnswer" class="transcript-content markdown-content" style="max-height: none; height: auto; min-height: 300px; line-height: 1.8; padding: 20px;">
+                        <!-- 답변이 여기에 표시됩니다 -->
+                    </div>
+                </div>
+
+                <!-- 검색된 컨텍스트 표시 (접을 수 있음) -->
+                <details style="margin-top: 20px;" open>
+                    <summary style="cursor: pointer; font-weight: bold; padding: 10px; background: var(--card-bg); border-radius: 8px; margin-bottom: 10px;">
+                        📚 참고한 검색 결과
+                    </summary>
+
+                    <!-- 요약 검색 결과 (먼저 표시) -->
+                    <div style="margin-bottom: 20px;">
+                        <h3 style="font-size: 1.1rem; margin-bottom: 10px;">📝 요약 검색 결과</h3>
+                        <div id="askContentSummaryResults" class="transcript-content" style="max-height: 400px; overflow-y: auto;">
+                            <!-- 요약 검색 결과가 여기에 표시됩니다 -->
+                        </div>
+                    </div>
+
+                    <!-- 전체 검색 결과 (Citation 기반) -->
+                    <div>
+                        <h3 style="font-size: 1.1rem; margin-bottom: 10px;">🔍 원문 세그먼트 (요약에서 인용된 내용)</h3>
+                        <div id="askContentTranscriptResults" class="transcript-content" style="max-height: 400px; overflow-y: auto;">
+                            <!-- 전체 검색 결과가 여기에 표시됩니다 -->
+                        </div>
+                    </div>
+                </details>
+            </section>
+        </div>
+
+        <!-- ========== 데이터 관리 탭 ========== -->
+        <div id="data-management-tab" class="tab-content">
+            <!-- 통계 섹션 -->
+            <section class="upload-section">
+                <div class="upload-card">
+                    <h2>📊 데이터베이스 통계</h2>
+                    <div id="dbStats" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 20px;">
+                        <!-- 통계 로드 중... -->
+                    </div>
+                    <button onclick="loadDataList()" class="btn-primary" style="margin-top: 20px;">
+                        🔄 새로고침
+                    </button>
+                </div>
+            </section>
+
+            <!-- 목록 섹션 -->
+            <section class="viewer-section">
+                <div class="transcript-box">
+                    <div class="transcript-header">
+                        <h2>📹 YouTube 영상 목록</h2>
+                    </div>
+                    <div id="youtubeList" class="transcript-content" style="max-height: 400px;">
+                        <p style="text-align: center; color: var(--text-muted);">로딩 중...</p>
+                    </div>
+                </div>
+
+                <div class="transcript-box" style="margin-top: 20px;">
+                    <div class="transcript-header">
+                        <h2>🎵 오디오 파일 목록</h2>
+                    </div>
+                    <div id="audioList" class="transcript-content" style="max-height: 400px;">
+                        <p style="text-align: center; color: var(--text-muted);">로딩 중...</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        // ========== 영상 검색 탭 전역 변수 ==========
+        let videoSessionId = null;
+        let videoId = null;
+        let videoSegments = [];
+        let videoChatHistory = [];
+        let youtubePlayer = null;
+        let videoAutoScrollEnabled = true;
+        let videoTaskId = null;
+        let videoTitle = null;  // 저장된 제목
+        let videoProgressInterval = null;
+
+        // ========== 오디오 검색 탭 전역 변수 ==========
+        let audioSessionId = null;
+        let audioFileHash = null;  // 오디오 파일 해시 (source_id로 사용)
+        let audioSegments = [];
+        let audioChatHistory = [];
+        let audioElement = null;
+        let audioAutoScrollEnabled = true;
+        let audioTaskId = null;
+        let audioProgressInterval = null;
+        let selectedAudioFile = null;
+        let audioTitle = null;  // 저장된 제목
+        let audioFilename = null;  // 백엔드에서 반환된 실제 파일명
+        let audioTimeUpdateHandler = null;  // 이벤트 핸들러 참조 저장
+
+        // ========== Retriever 탭 전역 변수 ==========
+        let retrieverYoutubePlayer = null;
+        let retrieverAudioPlayer = null;
+
+        // ========== 공통 함수 ==========
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // ========== 탭 전환 ==========
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const tabId = button.dataset.tab;
+
+                // 모든 탭 버튼 비활성화
+                document.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+
+                // 모든 탭 컨텐츠 숨김
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+
+                // 선택된 탭 활성화
+                button.classList.add('active');
+                document.getElementById(tabId).classList.add('active');
+            });
+        });
+
+        // ========================================
+        // 영상 검색 탭 로직
+        // ========================================
+
+        // YouTube 폼 제출
+        document.getElementById('youtubeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const youtubeUrl = document.getElementById('youtubeUrl').value.trim();
+
+            if (!youtubeUrl) {
+                alert('YouTube URL을 입력해주세요.');
+                return;
+            }
+
+            // 버튼 비활성화 및 텍스트 변경
+            const submitBtn = document.getElementById('videoSubmitBtn');
+            const submitBtnText = document.getElementById('videoSubmitBtnText');
+            submitBtn.disabled = true;
+            submitBtnText.textContent = '오디오 다운로드 및 텍스트 생성중';
+
+            // 프로그레스 바 초기화 (0%로 리셋)
+            document.getElementById('videoDownloadProgress').textContent = '0%';
+            document.getElementById('videoDownloadProgressBar').style.width = '0%';
+            document.getElementById('videoDownloadMessage').textContent = '대기 중...';
+            document.getElementById('videoSttProgress').textContent = '0%';
+            document.getElementById('videoSttProgressBar').style.width = '0%';
+            document.getElementById('videoSttMessage').textContent = '대기 중...';
+
+            // UI 상태 변경
+            document.getElementById('videoUploadStatus').innerHTML = '<p style="color: #666;">처리 중...</p>';
+            document.getElementById('videoProgressSection').style.display = 'block';
+
+            try {
+                const response = await fetch('/api/process-youtube', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        youtube_url: youtubeUrl
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.cached) {
+                        displayVideoResult(data);
+                    } else if (data.processing) {
+                        videoTaskId = data.task_id;
+                        startVideoProgressPolling();
+                    }
+                } else {
+                    alert('오류: ' + data.error);
+                    document.getElementById('videoProgressSection').style.display = 'none';
+                    // 버튼 재활성화
+                    submitBtn.disabled = false;
+                    submitBtnText.textContent = '영상 처리 시작';
+                }
+            } catch (error) {
+                console.error('오류:', error);
+                alert('처리 중 오류가 발생했습니다.');
+                document.getElementById('videoProgressSection').style.display = 'none';
+                // 버튼 재활성화
+                const submitBtn = document.getElementById('videoSubmitBtn');
+                const submitBtnText = document.getElementById('videoSubmitBtnText');
+                submitBtn.disabled = false;
+                submitBtnText.textContent = '영상 처리 시작';
+            }
+        });
+
+        // 영상 진행 상황 폴링
+        function startVideoProgressPolling() {
+            if (videoProgressInterval) {
+                clearInterval(videoProgressInterval);
+            }
+
+            videoProgressInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/progress/${videoTaskId}`);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        const progress = data.progress;
+
+                        if (progress.download) {
+                            updateVideoProgress('download', progress.download.progress, progress.download.message, progress.download);
+                        }
+
+                        if (progress.stt) {
+                            updateVideoProgress('stt', progress.stt.progress, progress.stt.message, progress.stt);
+                        }
+
+                        if (progress.vectorstore) {
+                            updateVideoProgress('vectorstore', progress.vectorstore.progress, progress.vectorstore.message, progress.vectorstore);
+                        }
+
+                        if (progress.completed && progress.result) {
+                            clearInterval(videoProgressInterval);
+                            // 최종 시간 정보 표시
+                            if (progress.stt) {
+                                updateVideoProgress('stt', 100, progress.stt.message, progress.stt);
+                            }
+                            displayVideoResult(progress.result);
+                        }
+
+                        if (progress.error) {
+                            clearInterval(videoProgressInterval);
+                            alert('오류: ' + progress.error.message);
+                            document.getElementById('videoProgressSection').style.display = 'none';
+                            // 버튼 재활성화
+                            const submitBtn = document.getElementById('videoSubmitBtn');
+                            const submitBtnText = document.getElementById('videoSubmitBtnText');
+                            submitBtn.disabled = false;
+                            submitBtnText.textContent = '영상 처리 시작';
+                        }
+                    }
+                } catch (error) {
+                    console.error('진행 상황 조회 오류:', error);
+                }
+            }, 1000);
+        }
+
+        function updateVideoProgress(type, percent, message, progressData = null) {
+            const progressSpan = document.getElementById(`video${type.charAt(0).toUpperCase() + type.slice(1)}Progress`);
+            const progressBar = document.getElementById(`video${type.charAt(0).toUpperCase() + type.slice(1)}ProgressBar`);
+            const messageDiv = document.getElementById(`video${type.charAt(0).toUpperCase() + type.slice(1)}Message`);
+
+            if (progressSpan) progressSpan.textContent = `${percent}%`;
+            if (progressBar) progressBar.style.width = `${percent}%`;
+
+            // 시간 정보 포함 메시지 생성
+            if (messageDiv) {
+                let fullMessage = message;
+
+                if (progressData && (progressData.estimated_time || progressData.elapsed_time)) {
+                    const timeInfo = [];
+
+                    if (progressData.estimated_time !== undefined) {
+                        timeInfo.push(`예상: ${Math.round(progressData.estimated_time)}초`);
+                    }
+
+                    if (progressData.elapsed_time !== undefined) {
+                        timeInfo.push(`경과: ${Math.round(progressData.elapsed_time)}초`);
+                    }
+
+                    if (progressData.remaining_time !== undefined) {
+                        timeInfo.push(`남음: ${Math.round(progressData.remaining_time)}초`);
+                    }
+
+                    if (timeInfo.length > 0) {
+                        fullMessage += ` (${timeInfo.join(', ')})`;
+                    }
+                }
+
+                messageDiv.textContent = fullMessage;
+            }
+        }
+
+        // 영상 결과 표시
+        function displayVideoResult(data) {
+            videoSessionId = data.session_id;
+            videoId = data.video_id;
+            videoSegments = data.segments;
+
+            // 버튼 재활성화
+            const submitBtn = document.getElementById('videoSubmitBtn');
+            const submitBtnText = document.getElementById('videoSubmitBtnText');
+            submitBtn.disabled = false;
+            submitBtnText.textContent = '영상 처리 시작';
+
+            // 업로드 섹션 숨기기
+            document.getElementById('videoUploadSection').style.display = 'none';
+            document.getElementById('videoViewerSection').style.display = 'block';
+
+            // 영상 정보 표시
+            document.getElementById('videoInfo').innerHTML = `
+                <div class="info-row">
+                    <div class="info-item">
+                        <strong>제목:</strong> <span>${data.title}</span>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-item">
+                        <strong>채널:</strong> <span>${data.channel}</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>조회수:</strong> <span>${data.view_count.toLocaleString()}</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>업로드 날짜:</strong> <span>${data.upload_date}</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>처리 일시:</strong> <span>${data.created_at}</span>
+                    </div>
+                </div>
+            `;
+
+            // YouTube Player 초기화
+            if (!youtubePlayer) {
+                youtubePlayer = new YT.Player('youtubePlayer', {
+                    videoId: data.video_id,
+                    width: '100%',
+                    height: '400',
+                    playerVars: {
+                        'autoplay': 0,
+                        'controls': 1
+                    },
+                    events: {
+                        'onReady': onYouTubePlayerReady,
+                        'onStateChange': onYouTubePlayerStateChange
+                    }
+                });
+            } else {
+                youtubePlayer.loadVideoById(data.video_id);
+            }
+
+            // 회의록 표시
+            displayVideoTranscript(data.segments);
+
+            // 요약 먼저 초기화 (무조건)
+            videoRawSummary = '';  // 원본 마크다운 초기화
+            document.getElementById('videoSummaryContent').innerHTML = '<p class="summary-placeholder">요약 생성 버튼을 클릭하세요</p>';
+
+            // 요약이 있고 비어있지 않으면 표시
+            if (data.summary && data.summary.trim() !== '') {
+                videoRawSummary = data.summary;  // 캐시된 원본 마크다운 저장
+                document.getElementById('videoSummaryContent').innerHTML = marked.parse(data.summary);
+                console.log('[Video] Loaded cached summary and raw markdown.');
+            }
+
+            // 채팅 초기화 (새로운 영상이므로)
+            document.getElementById('videoChatMessages').innerHTML = `
+                <div class="chat-welcome">
+                    회의록 내용에 대해 질문해보세요!
+                </div>
+            `;
+            videoChatHistory = [];
+
+            // 진행 상황 숨기기
+            document.getElementById('videoProgressSection').style.display = 'none';
+
+            console.log('[Video] New video loaded. Summary and chat initialized.');
+        }
+
+        // 영상 회의록 표시
+        // 영상 세그먼트 자동 정지용
+        let videoSegmentStopInterval = null;
+
+        function displayVideoTranscript(segments) {
+            const transcriptContent = document.getElementById('videoTranscriptContent');
+            transcriptContent.innerHTML = '';
+
+            segments.forEach((segment, idx) => {
+                const segmentDiv = document.createElement('div');
+                segmentDiv.className = 'transcript-segment';
+                segmentDiv.dataset.time = segment.start_time;
+                segmentDiv.dataset.id = segment.id;
+
+                // end_time 계산 (다음 세그먼트의 start_time)
+                const endTime = idx < segments.length - 1 ? segments[idx + 1].start_time : null;
+                if (endTime) {
+                    segmentDiv.dataset.endTime = endTime;
+                }
+
+                const minutes = Math.floor(segment.start_time / 60);
+                const seconds = Math.floor(segment.start_time % 60);
+                const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+                // end_time 표시
+                let timeRangeStr = timeStr;
+                if (endTime) {
+                    const endMinutes = Math.floor(endTime / 60);
+                    const endSeconds = Math.floor(endTime % 60);
+                    const endTimeStr = `${String(endMinutes).padStart(2, '0')}:${String(endSeconds).padStart(2, '0')}`;
+                    timeRangeStr = `${timeStr} ~ ${endTimeStr}`;
+                }
+
+                segmentDiv.innerHTML = `
+                    <div class="segment-header">
+                        <span class="segment-speaker">화자 ${segment.speaker}</span>
+                        <span class="segment-time">${timeRangeStr}</span>
+                    </div>
+                    <div class="segment-text">${segment.text}</div>
+                `;
+
+                segmentDiv.addEventListener('click', () => {
+                    if (youtubePlayer) {
+                        // 기존 interval 제거
+                        if (videoSegmentStopInterval) {
+                            clearInterval(videoSegmentStopInterval);
+                        }
+
+                        console.log(`[Video] 자동 스크롤 상태: ${videoAutoScrollEnabled ? 'ON' : 'OFF'}, endTime: ${endTime}`);
+
+                        // 시작 위치로 이동 후 재생
+                        youtubePlayer.seekTo(segment.start_time, true);
+                        youtubePlayer.playVideo();
+
+                        // 자동 스크롤 OFF이고 end_time이 있으면 자동 정지 설정
+                        if (!videoAutoScrollEnabled && endTime) {
+                            console.log(`[Video] 자동 정지 설정: ${segment.start_time}s ~ ${endTime}s`);
+                            videoSegmentStopInterval = setInterval(() => {
+                                const currentTime = youtubePlayer.getCurrentTime();
+                                if (currentTime >= endTime) {
+                                    youtubePlayer.pauseVideo();
+                                    clearInterval(videoSegmentStopInterval);
+                                    console.log(`[Video] Auto-stopped at ${endTime}s`);
+                                }
+                            }, 100);
+                        } else {
+                            console.log(`[Video] 연속 재생 모드 (자동 정지 안 함)`);
+                        }
+                    }
+                });
+
+                transcriptContent.appendChild(segmentDiv);
+            });
+
+            document.getElementById('videoSegmentInfo').textContent = `총 ${segments.length}개 세그먼트`;
+        }
+
+        // 영상 요약 생성
+        let videoRawSummary = '';  // 원본 마크다운 텍스트 저장용
+        document.getElementById('videoGenerateSummaryBtn').addEventListener('click', async () => {
+            document.getElementById('videoSummaryLoading').style.display = 'block';
+            document.getElementById('videoSummaryContent').innerHTML = '';
+
+            try {
+                const response = await fetch('/api/summarize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        segments: videoSegments,
+                        session_id: videoSessionId,
+                        title: videoTitle  // 저장된 제목을 요약 생성 시 참조
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    videoRawSummary = data.summary;  // 원본 마크다운 저장 (citation 포함)
+                    document.getElementById('videoSummaryContent').innerHTML = marked.parse(data.summary);
+                    console.log('[Video] Raw summary saved for VectorStore');
+                } else {
+                    alert('오류: ' + data.error);
+                }
+            } catch (error) {
+                console.error('오류:', error);
+                alert('요약 생성 중 오류가 발생했습니다.');
+            } finally {
+                document.getElementById('videoSummaryLoading').style.display = 'none';
+            }
+        });
+
+        // 영상 채팅 전송
+        document.getElementById('videoSendChatBtn').addEventListener('click', () => sendVideoChatMessage());
+        document.getElementById('videoChatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendVideoChatMessage();
+            }
+        });
+
+        async function sendVideoChatMessage() {
+            const chatInput = document.getElementById('videoChatInput');
+            const message = chatInput.value.trim();
+
+            if (!message) return;
+
+            const chatMessages = document.getElementById('videoChatMessages');
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'chat-message user-message';
+            userMessageDiv.innerHTML = `<div class="message-content">${message}</div>`;
+            chatMessages.appendChild(userMessageDiv);
+
+            chatInput.value = '';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            document.getElementById('videoChatLoading').style.display = 'block';
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        segments: videoSegments,
+                        session_id: videoSessionId,
+                        chat_history: videoChatHistory
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const aiMessageDiv = document.createElement('div');
+                    aiMessageDiv.className = 'chat-message ai-message';
+                    aiMessageDiv.innerHTML = `<div class="message-content">${marked.parse(data.response)}</div>`;
+                    chatMessages.appendChild(aiMessageDiv);
+
+                    videoChatHistory = data.chat_history;
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                } else {
+                    alert('오류: ' + data.error);
+                }
+            } catch (error) {
+                console.error('오류:', error);
+                alert('채팅 중 오류가 발생했습니다.');
+            } finally {
+                document.getElementById('videoChatLoading').style.display = 'none';
+            }
+        }
+
+        // 영상 채팅 초기화
+        document.getElementById('videoClearChatBtn').addEventListener('click', () => {
+            if (confirm('대화 내역을 모두 삭제하시겠습니까?')) {
+                document.getElementById('videoChatMessages').innerHTML = `
+                    <div class="chat-welcome">
+                        회의록 내용에 대해 질문해보세요!
+                    </div>
+                `;
+                videoChatHistory = [];
+            }
+        });
+
+        // 영상 제목 저장
+        document.getElementById('saveVideoTitleBtn').addEventListener('click', () => {
+            const title = document.getElementById('videoTitleInput').value.trim();
+            const statusDiv = document.getElementById('videoTitleStatus');
+
+            if (!title) {
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ 제목을 입력해주세요.</span>';
+                return;
+            }
+
+            // 제목을 변수에 저장
+            videoTitle = title;
+            statusDiv.innerHTML = '<span style="color: #10b981;">✅ 제목이 저장되었습니다. 요약 생성 및 VectorStore 저장 시 사용됩니다.</span>';
+
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 3000);
+
+            console.log('[Video] 제목 저장됨:', videoTitle);
+        });
+
+        // YouTube VectorStore 저장
+        document.getElementById('saveVideoToVectorstoreBtn').addEventListener('click', async () => {
+            const statusDiv = document.getElementById('videoVectorstoreSaveStatus');
+            const saveBtn = document.getElementById('saveVideoToVectorstoreBtn');
+
+            // 유효성 검사
+            if (!videoId) {
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ video_id를 찾을 수 없습니다.</span>';
+                return;
+            }
+
+            if (videoSegments.length === 0) {
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ 저장할 세그먼트가 없습니다.</span>';
+                return;
+            }
+
+            if (!videoTitle) {
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ 제목을 먼저 저장해주세요.</span>';
+                return;
+            }
+
+            if (!videoRawSummary || videoRawSummary.trim() === '') {
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ 요약을 먼저 생성해주세요.</span>';
+                return;
+            }
+
+            // 버튼 비활성화 및 저장 중 메시지 표시
+            saveBtn.disabled = true;
+            saveBtn.style.opacity = '0.6';
+            saveBtn.style.cursor = 'not-allowed';
+            statusDiv.innerHTML = '<span style="color: #666;">💾 VectorStore에 저장중입니다...</span>';
+            console.log('[Video] Saving to VectorStore with raw summary (citations preserved)');
+            console.log('[Video] Summary length:', videoRawSummary ? videoRawSummary.length : 0);
+            console.log('[Video] Summary preview:', videoRawSummary ? videoRawSummary.substring(0, 200) : 'EMPTY');
+
+            try {
+                const payload = {
+                    source_id: videoId,
+                    source_type: 'youtube',
+                    segments: videoSegments,
+                    title: videoTitle,
+                    summary: videoRawSummary  // 원본 마크다운 사용 (citation 포함)
+                };
+                console.log('[Video] Payload summary included:', !!payload.summary);
+
+                const response = await fetch('/api/save-to-vectorstore', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    statusDiv.innerHTML = `<span style="color: #10b981;">✅ ${data.message}</span>`;
+                    setTimeout(() => {
+                        statusDiv.innerHTML = '';
+                    }, 5000);
+                } else {
+                    statusDiv.innerHTML = `<span style="color: #dc2626;">❌ ${data.error}</span>`;
+                }
+            } catch (error) {
+                console.error('VectorStore 저장 오류:', error);
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ VectorStore 저장 중 오류가 발생했습니다.</span>';
+            } finally {
+                // 버튼 재활성화
+                saveBtn.disabled = false;
+                saveBtn.style.opacity = '1';
+                saveBtn.style.cursor = 'pointer';
+            }
+        });
+
+        // 영상 변경
+        document.getElementById('changeVideoBtn').addEventListener('click', () => {
+            if (confirm('현재 작업을 종료하고 새로운 영상을 처리하시겠습니까?')) {
+                // 뷰어 섹션 숨기고 업로드 섹션 표시
+                document.getElementById('videoViewerSection').style.display = 'none';
+                document.getElementById('videoUploadSection').style.display = 'block';
+                document.getElementById('youtubeUrl').value = '';
+
+                // 요약 초기화
+                document.getElementById('videoSummaryContent').innerHTML = '<p class="summary-placeholder">요약 생성 버튼을 클릭하세요</p>';
+
+                // 채팅 초기화
+                document.getElementById('videoChatMessages').innerHTML = `
+                    <div class="chat-welcome">
+                        회의록 내용에 대해 질문해보세요!
+                    </div>
+                `;
+                videoChatHistory = [];
+
+                // 회의록 초기화
+                document.getElementById('videoTranscriptContent').innerHTML = '';
+                videoSegments = [];
+                videoSessionId = null;
+                videoId = null;
+
+                // YouTube Player 정리
+                if (videoHighlightInterval) {
+                    clearInterval(videoHighlightInterval);
+                    videoHighlightInterval = null;
+                }
+
+                console.log('[Video] Session cleared. Ready for new video.');
+            }
+        });
+
+        // 영상 자동 스크롤 토글
+        document.getElementById('videoAutoScrollToggle').addEventListener('click', function() {
+            videoAutoScrollEnabled = !videoAutoScrollEnabled;
+            this.classList.toggle('active');
+            this.textContent = videoAutoScrollEnabled ? '자동 스크롤: ON' : '자동 스크롤: OFF';
+            console.log(`[Video] 자동 스크롤 토글: ${videoAutoScrollEnabled ? 'ON' : 'OFF'}`);
+        });
+
+        // YouTube 플레이어 이벤트 핸들러
+        let videoHighlightInterval = null;
+
+        function onYouTubePlayerReady(event) {
+            // 플레이어가 준비되었을 때
+        }
+
+        function onYouTubePlayerStateChange(event) {
+            // 재생 중일 때만 하이라이트 업데이트
+            if (event.data === YT.PlayerState.PLAYING) {
+                console.log('[Video] Player started playing. Starting highlight updates.');
+                if (videoHighlightInterval) {
+                    clearInterval(videoHighlightInterval);
+                }
+                videoHighlightInterval = setInterval(() => {
+                    if (youtubePlayer && youtubePlayer.getCurrentTime) {
+                        const currentTime = youtubePlayer.getCurrentTime();
+                        console.log('[Video] Current time:', currentTime.toFixed(2), 's');
+                        highlightCurrentVideoSegment(currentTime);
+                    }
+                }, 100); // 100ms마다 업데이트
+            } else {
+                // 일시정지, 정지 등
+                console.log('[Video] Player paused/stopped. Stopping highlight updates.');
+                if (videoHighlightInterval) {
+                    clearInterval(videoHighlightInterval);
+                    videoHighlightInterval = null;
+                }
+            }
+        }
+
+        // 영상 재생 시간에 따라 현재 세그먼트 하이라이트
+        function highlightCurrentVideoSegment(currentTime) {
+            if (!videoSegments || videoSegments.length === 0) {
+                console.warn('[Video Highlight] No video segments available');
+                return;
+            }
+
+            // 현재 시간에 해당하는 세그먼트 찾기
+            let currentSegment = null;
+            for (let i = 0; i < videoSegments.length; i++) {
+                const segment = videoSegments[i];
+                const nextSegment = videoSegments[i + 1];
+
+                if (nextSegment) {
+                    if (currentTime >= segment.start_time && currentTime < nextSegment.start_time) {
+                        currentSegment = segment;
+                        break;
+                    }
+                } else {
+                    if (currentTime >= segment.start_time) {
+                        currentSegment = segment;
+                        break;
+                    }
+                }
+            }
+
+            if (currentSegment) {
+                console.log('[Video Highlight] Found segment:', {
+                    id: currentSegment.id,
+                    speaker: currentSegment.speaker,
+                    start_time: currentSegment.start_time
+                });
+
+                // 모든 세그먼트에서 active-audio 클래스 제거
+                const allSegments = document.querySelectorAll('#videoTranscriptContent .transcript-segment');
+                allSegments.forEach(seg => seg.classList.remove('active-audio'));
+
+                // 현재 세그먼트에 active-audio 클래스 추가
+                const currentSegmentElement = document.querySelector(
+                    `#videoTranscriptContent .transcript-segment[data-id="${currentSegment.id}"]`
+                );
+
+                if (currentSegmentElement) {
+                    console.log('[Video Highlight] ✅ Adding active-audio to segment ID:', currentSegment.id);
+                    currentSegmentElement.classList.add('active-audio');
+
+                    // 자동 스크롤이 활성화되어 있으면 회의록 컨테이너 내부에서만 스크롤
+                    if (videoAutoScrollEnabled) {
+                        const transcriptContainer = document.getElementById('videoTranscriptContent');
+
+                        // 더 정확한 위치 계산을 위해 getBoundingClientRect 사용
+                        const containerRect = transcriptContainer.getBoundingClientRect();
+                        const elementRect = currentSegmentElement.getBoundingClientRect();
+
+                        // 컨테이너 기준 상대 위치 계산
+                        const relativeTop = elementRect.top - containerRect.top + transcriptContainer.scrollTop;
+                        const containerHeight = transcriptContainer.clientHeight;
+                        const elementHeight = currentSegmentElement.offsetHeight;
+
+                        // 요소를 컨테이너 중앙에 위치시키기
+                        const scrollTo = relativeTop - (containerHeight / 2) + (elementHeight / 2);
+
+                        transcriptContainer.scrollTo({
+                            top: scrollTo,
+                            behavior: 'smooth'
+                        });
+
+                        console.log('[Video Highlight] Container height:', containerHeight, 'Element relative top:', relativeTop, 'Scrolling to:', scrollTo);
+                    }
+                } else {
+                    console.error('[Video Highlight] ❌ Could not find segment element with data-id:', currentSegment.id);
+                }
+            }
+        }
+
+        // ========================================
+        // 오디오 검색 탭 로직
+        // ========================================
+
+        // 파일 업로드 영역
+        const fileUploadArea = document.getElementById('fileUploadArea');
+        const audioFileInput = document.getElementById('audioFileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const audioSubmitBtn = document.getElementById('audioSubmitBtn');
+
+        fileUploadArea.addEventListener('click', () => {
+            audioFileInput.click();
+        });
+
+        fileUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileUploadArea.classList.add('drag-over');
+        });
+
+        fileUploadArea.addEventListener('dragleave', () => {
+            fileUploadArea.classList.remove('drag-over');
+        });
+
+        fileUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileUploadArea.classList.remove('drag-over');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
+        audioFileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            selectedAudioFile = file;
+
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            document.getElementById('fileType').textContent = file.type || '알 수 없음';
+            fileInfo.classList.add('show');
+
+            audioSubmitBtn.disabled = false;
+        }
+
+        // 오디오 폼 제출
+        document.getElementById('audioForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!selectedAudioFile) {
+                alert('오디오 파일을 선택해주세요.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('audio_file', selectedAudioFile);
+
+            document.getElementById('audioUploadStatus').innerHTML = '<p style="color: #666;">처리 중...</p>';
+            document.getElementById('audioProgressSection').style.display = 'block';
+            audioSubmitBtn.disabled = true;
+            audioSubmitBtn.innerHTML = '<span class="btn-icon">⏳</span>오디오에서 텍스트 추출중';
+
+            try {
+                const response = await fetch('/api/process-audio', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.cached) {
+                        displayAudioResult(data);
+                    } else if (data.processing) {
+                        audioTaskId = data.task_id;
+                        const estimatedTime = data.estimated_time || 60; // 기본값 60초
+                        startAudioProgressPolling(estimatedTime);
+                    }
+                } else {
+                    alert('오류: ' + data.error);
+                    document.getElementById('audioProgressSection').style.display = 'none';
+                    audioSubmitBtn.disabled = false;
+                    audioSubmitBtn.innerHTML = '<span class="btn-icon">🎤</span>오디오 처리 시작';
+                }
+            } catch (error) {
+                console.error('오류:', error);
+                alert('처리 중 오류가 발생했습니다.');
+                document.getElementById('audioProgressSection').style.display = 'none';
+                audioSubmitBtn.disabled = false;
+                audioSubmitBtn.innerHTML = '<span class="btn-icon">🎤</span>오디오 처리 시작';
+            }
+        });
+
+        // 오디오 진행 상황 폴링 (예상 시간 기반 프로그레스 바)
+        function startAudioProgressPolling(estimatedTime) {
+            if (audioProgressInterval) {
+                clearInterval(audioProgressInterval);
+            }
+
+            // 예상 시간 기반 프로그레스 바 업데이트
+            const startTime = Date.now();
+            const updateInterval = 200; // 200ms마다 업데이트
+            let simulatedProgress = 0;
+
+            // 시뮬레이션 타이머 (프로그레스 바를 부드럽게 증가)
+            const simulationInterval = setInterval(() => {
+                const elapsed = (Date.now() - startTime) / 1000; // 경과 시간 (초)
+                simulatedProgress = Math.min(95, (elapsed / estimatedTime) * 100); // 최대 95%까지만
+
+                updateAudioProgress('stt', Math.round(simulatedProgress), '오디오에서 텍스트 추출중...');
+            }, updateInterval);
+
+            // 실제 진행 상황 폴링 (서버에서 완료 신호 확인)
+            audioProgressInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/progress/${audioTaskId}`);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        const progress = data.progress;
+
+                        // 실제 서버에서 진행 상황이 오면 해당 값 사용
+                        if (progress.stt && progress.stt.progress > 0) {
+                            clearInterval(simulationInterval); // 시뮬레이션 중지
+                            updateAudioProgress('stt', progress.stt.progress, progress.stt.message, progress.stt);
+                        }
+
+                        if (progress.vectorstore) {
+                            updateAudioProgress('vectorstore', progress.vectorstore.progress, progress.vectorstore.message, progress.vectorstore);
+                        }
+
+                        if (progress.completed && progress.result) {
+                            clearInterval(audioProgressInterval);
+                            clearInterval(simulationInterval);
+                            // 최종 시간 정보 표시
+                            const finalMessage = progress.stt ? progress.stt.message : 'STT 완료';
+                            updateAudioProgress('stt', 100, finalMessage, progress.stt);
+                            displayAudioResult(progress.result);
+                        }
+
+                        if (progress.error) {
+                            clearInterval(audioProgressInterval);
+                            clearInterval(simulationInterval);
+                            alert('오류: ' + progress.error.message);
+                            document.getElementById('audioProgressSection').style.display = 'none';
+                            audioSubmitBtn.disabled = false;
+                            audioSubmitBtn.innerHTML = '<span class="btn-icon">🎤</span>오디오 처리 시작';
+                        }
+                    }
+                } catch (error) {
+                    console.error('진행 상황 조회 오류:', error);
+                }
+            }, 1000);
+        }
+
+        function updateAudioProgress(type, percent, message, progressData = null) {
+            const progressSpan = document.getElementById(`audio${type.charAt(0).toUpperCase() + type.slice(1)}Progress`);
+            const progressBar = document.getElementById(`audio${type.charAt(0).toUpperCase() + type.slice(1)}ProgressBar`);
+            const messageDiv = document.getElementById(`audio${type.charAt(0).toUpperCase() + type.slice(1)}Message`);
+
+            if (progressSpan) progressSpan.textContent = `${percent}%`;
+            if (progressBar) progressBar.style.width = `${percent}%`;
+
+            // 시간 정보 포함 메시지 생성
+            if (messageDiv) {
+                let fullMessage = message;
+
+                if (progressData && (progressData.estimated_time || progressData.elapsed_time)) {
+                    const timeInfo = [];
+
+                    if (progressData.estimated_time !== undefined) {
+                        timeInfo.push(`예상: ${Math.round(progressData.estimated_time)}초`);
+                    }
+
+                    if (progressData.elapsed_time !== undefined) {
+                        timeInfo.push(`경과: ${Math.round(progressData.elapsed_time)}초`);
+                    }
+
+                    if (progressData.remaining_time !== undefined) {
+                        timeInfo.push(`남음: ${Math.round(progressData.remaining_time)}초`);
+                    }
+
+                    if (timeInfo.length > 0) {
+                        fullMessage += ` (${timeInfo.join(', ')})`;
+                    }
+                }
+
+                messageDiv.textContent = fullMessage;
+            }
+        }
+
+        // 오디오 결과 표시
+        function displayAudioResult(data) {
+            audioSessionId = data.session_id;
+            audioFileHash = data.file_hash;  // 파일 해시 저장
+            audioFilename = data.filename;  // 백엔드에서 반환된 실제 파일명 저장
+            audioSegments = data.segments;
+
+            // 업로드 섹션 숨기기
+            document.getElementById('audioUploadSection').style.display = 'none';
+            document.getElementById('audioViewerSection').style.display = 'block';
+
+            // 오디오 정보 표시
+            const audioDurationMin = Math.floor(data.audio_duration / 60);
+            const audioDurationSec = Math.floor(data.audio_duration % 60);
+            const audioDurationStr = `${audioDurationMin}분 ${audioDurationSec}초`;
+
+            document.getElementById('audioContentInfo').innerHTML = `
+                <div class="info-row">
+                    <div class="info-item">
+                        <strong>파일명:</strong> <span>${data.filename}</span>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-item">
+                        <strong>파일 크기:</strong> <span>${formatFileSize(data.file_size)}</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>오디오 길이:</strong> <span>${audioDurationStr}</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>처리 일시:</strong> <span>${data.created_at}</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>STT 처리 시간:</strong> <span>${data.stt_processing_time.toFixed(2)}초</span>
+                    </div>
+                </div>
+            `;
+
+            // 오디오 플레이어 설정
+            const audioPath = data.file_path.replace(/\\/g, '/');
+            const audioUrl = `/uploads/${audioPath.split('/').pop()}`;
+
+            audioElement = document.getElementById('audioPlayer');
+            audioElement.src = audioUrl;
+
+            // 기존 이벤트 리스너 제거 (중복 방지)
+            if (audioTimeUpdateHandler) {
+                audioElement.removeEventListener('timeupdate', audioTimeUpdateHandler);
+            }
+
+            // 새로운 이벤트 핸들러 정의
+            audioTimeUpdateHandler = () => {
+                const currentTime = audioElement.currentTime;
+                console.log('[Audio] Current time:', currentTime.toFixed(2), 's');
+                highlightCurrentAudioSegment(currentTime);
+            };
+
+            // 오디오 재생 시간에 따라 대화 하이라이트
+            audioElement.addEventListener('timeupdate', audioTimeUpdateHandler);
+            console.log('[Audio] Event listener attached. Total segments:', audioSegments.length);
+
+            // 회의록 표시
+            displayAudioTranscript(data.segments);
+
+            // 요약 먼저 초기화 (무조건)
+            audioRawSummary = '';  // 원본 마크다운 초기화
+            document.getElementById('audioSummaryContent').innerHTML = '<p class="summary-placeholder">요약 생성 버튼을 클릭하세요</p>';
+
+            // 요약이 있고 비어있지 않으면 표시
+            if (data.summary && data.summary.trim() !== '') {
+                audioRawSummary = data.summary;  // 캐시된 원본 마크다운 저장
+                document.getElementById('audioSummaryContent').innerHTML = marked.parse(data.summary);
+                console.log('[Audio] Loaded cached summary and raw markdown.');
+            }
+
+            // 채팅 초기화 (새로운 오디오이므로)
+            document.getElementById('audioChatMessages').innerHTML = `
+                <div class="chat-welcome">
+                    회의록 내용에 대해 질문해보세요!
+                </div>
+            `;
+            audioChatHistory = [];
+
+            // 진행 상황 숨기기
+            document.getElementById('audioProgressSection').style.display = 'none';
+            audioSubmitBtn.disabled = false;
+            audioSubmitBtn.innerHTML = '<span class="btn-icon">🎤</span>오디오 처리 시작';
+
+            console.log('[Audio] New audio loaded. Summary and chat initialized.');
+        }
+
+        // 오디오 회의록 표시
+        // 오디오 세그먼트 자동 정지용
+        let audioSegmentStopListener = null;
+
+        function displayAudioTranscript(segments) {
+            const transcriptContent = document.getElementById('audioTranscriptContent');
+            transcriptContent.innerHTML = '';
+
+            segments.forEach((segment, idx) => {
+                const segmentDiv = document.createElement('div');
+                segmentDiv.className = 'transcript-segment';
+                segmentDiv.dataset.time = segment.start_time;
+                segmentDiv.dataset.id = segment.id;
+
+                // end_time 계산 (다음 세그먼트의 start_time)
+                const endTime = idx < segments.length - 1 ? segments[idx + 1].start_time : null;
+                if (endTime) {
+                    segmentDiv.dataset.endTime = endTime;
+                }
+
+                const minutes = Math.floor(segment.start_time / 60);
+                const seconds = Math.floor(segment.start_time % 60);
+                const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+                // end_time 표시
+                let timeRangeStr = timeStr;
+                if (endTime) {
+                    const endMinutes = Math.floor(endTime / 60);
+                    const endSeconds = Math.floor(endTime % 60);
+                    const endTimeStr = `${String(endMinutes).padStart(2, '0')}:${String(endSeconds).padStart(2, '0')}`;
+                    timeRangeStr = `${timeStr} ~ ${endTimeStr}`;
+                }
+
+                segmentDiv.innerHTML = `
+                    <div class="segment-header">
+                        <span class="segment-speaker">화자 ${segment.speaker}</span>
+                        <span class="segment-time">${timeRangeStr}</span>
+                    </div>
+                    <div class="segment-text">${segment.text}</div>
+                `;
+
+                segmentDiv.addEventListener('click', () => {
+                    if (audioElement) {
+                        // 기존 listener 제거
+                        if (audioSegmentStopListener) {
+                            audioElement.removeEventListener('timeupdate', audioSegmentStopListener);
+                        }
+
+                        console.log(`[Audio] 자동 스크롤 상태: ${audioAutoScrollEnabled ? 'ON' : 'OFF'}, endTime: ${endTime}`);
+
+                        // 시작 위치로 이동 후 재생
+                        audioElement.currentTime = segment.start_time;
+                        audioElement.play();
+
+                        // 자동 스크롤 OFF이고 end_time이 있으면 자동 정지 설정
+                        if (!audioAutoScrollEnabled && endTime) {
+                            console.log(`[Audio] 자동 정지 설정: ${segment.start_time}s ~ ${endTime}s`);
+                            audioSegmentStopListener = function() {
+                                if (audioElement.currentTime >= endTime) {
+                                    audioElement.pause();
+                                    console.log(`[Audio] Auto-stopped at ${endTime}s`);
+                                }
+                            };
+                            audioElement.addEventListener('timeupdate', audioSegmentStopListener);
+                        } else {
+                            console.log(`[Audio] 연속 재생 모드 (자동 정지 안 함)`);
+                        }
+                    }
+                });
+
+                transcriptContent.appendChild(segmentDiv);
+            });
+
+            document.getElementById('audioSegmentInfo').textContent = `총 ${segments.length}개 세그먼트`;
+        }
+
+        // 오디오 요약 생성
+        let audioRawSummary = '';  // 원본 마크다운 텍스트 저장용
+        document.getElementById('audioGenerateSummaryBtn').addEventListener('click', async () => {
+            document.getElementById('audioSummaryLoading').style.display = 'block';
+            document.getElementById('audioSummaryContent').innerHTML = '';
+
+            try {
+                const response = await fetch('/api/summarize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        segments: audioSegments,
+                        session_id: audioSessionId,
+                        title: audioTitle  // 저장된 제목을 요약 생성 시 참조
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    audioRawSummary = data.summary;  // 원본 마크다운 저장 (citation 포함)
+                    document.getElementById('audioSummaryContent').innerHTML = marked.parse(data.summary);
+                    console.log('[Audio] Raw summary saved for VectorStore');
+                } else {
+                    alert('오류: ' + data.error);
+                }
+            } catch (error) {
+                console.error('오류:', error);
+                alert('요약 생성 중 오류가 발생했습니다.');
+            } finally {
+                document.getElementById('audioSummaryLoading').style.display = 'none';
+            }
+        });
+
+        // 오디오 채팅 전송
+        document.getElementById('audioSendChatBtn').addEventListener('click', () => sendAudioChatMessage());
+        document.getElementById('audioChatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendAudioChatMessage();
+            }
+        });
+
+        async function sendAudioChatMessage() {
+            const chatInput = document.getElementById('audioChatInput');
+            const message = chatInput.value.trim();
+
+            if (!message) return;
+
+            const chatMessages = document.getElementById('audioChatMessages');
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'chat-message user-message';
+            userMessageDiv.innerHTML = `<div class="message-content">${message}</div>`;
+            chatMessages.appendChild(userMessageDiv);
+
+            chatInput.value = '';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            document.getElementById('audioChatLoading').style.display = 'block';
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        segments: audioSegments,
+                        session_id: audioSessionId,
+                        chat_history: audioChatHistory
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const aiMessageDiv = document.createElement('div');
+                    aiMessageDiv.className = 'chat-message ai-message';
+                    aiMessageDiv.innerHTML = `<div class="message-content">${marked.parse(data.response)}</div>`;
+                    chatMessages.appendChild(aiMessageDiv);
+
+                    audioChatHistory = data.chat_history;
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                } else {
+                    alert('오류: ' + data.error);
+                }
+            } catch (error) {
+                console.error('오류:', error);
+                alert('채팅 중 오류가 발생했습니다.');
+            } finally {
+                document.getElementById('audioChatLoading').style.display = 'none';
+            }
+        }
+
+        // 오디오 채팅 초기화
+        document.getElementById('audioClearChatBtn').addEventListener('click', () => {
+            if (confirm('대화 내역을 모두 삭제하시겠습니까?')) {
+                document.getElementById('audioChatMessages').innerHTML = `
+                    <div class="chat-welcome">
+                        회의록 내용에 대해 질문해보세요!
+                    </div>
+                `;
+                audioChatHistory = [];
+            }
+        });
+
+        // 오디오 제목 저장
+        document.getElementById('saveAudioTitleBtn').addEventListener('click', () => {
+            const title = document.getElementById('audioTitleInput').value.trim();
+            const statusDiv = document.getElementById('audioTitleStatus');
+
+            if (!title) {
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ 제목을 입력해주세요.</span>';
+                return;
+            }
+
+            // 제목을 변수에 저장
+            audioTitle = title;
+            statusDiv.innerHTML = '<span style="color: #10b981;">✅ 제목이 저장되었습니다. 요약 생성 및 VectorStore 저장 시 사용됩니다.</span>';
+
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 3000);
+
+            console.log('[Audio] 제목 저장됨:', audioTitle);
+        });
+
+        // Audio VectorStore 저장
+        document.getElementById('saveAudioToVectorstoreBtn').addEventListener('click', async () => {
+            const statusDiv = document.getElementById('audioVectorstoreSaveStatus');
+            const saveBtn = document.getElementById('saveAudioToVectorstoreBtn');
+
+            // 유효성 검사
+            if (!audioFileHash) {
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ file_hash를 찾을 수 없습니다.</span>';
+                return;
+            }
+
+            if (audioSegments.length === 0) {
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ 저장할 세그먼트가 없습니다.</span>';
+                return;
+            }
+
+            if (!audioTitle) {
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ 제목을 먼저 저장해주세요.</span>';
+                return;
+            }
+
+            if (!audioRawSummary || audioRawSummary.trim() === '') {
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ 요약을 먼저 생성해주세요.</span>';
+                return;
+            }
+
+            // 버튼 비활성화 및 저장 중 메시지 표시
+            saveBtn.disabled = true;
+            saveBtn.style.opacity = '0.6';
+            saveBtn.style.cursor = 'not-allowed';
+            statusDiv.innerHTML = '<span style="color: #666;">💾 VectorStore에 저장중입니다...</span>';
+            console.log('[Audio] Saving to VectorStore with raw summary (citations preserved)');
+            console.log('[Audio] Summary length:', audioRawSummary ? audioRawSummary.length : 0);
+            console.log('[Audio] Summary preview:', audioRawSummary ? audioRawSummary.substring(0, 200) : 'EMPTY');
+
+            try {
+                const payload = {
+                    source_id: audioFileHash,
+                    source_type: 'audio',
+                    segments: audioSegments,
+                    title: audioTitle,
+                    summary: audioRawSummary,  // 원본 마크다운 사용 (citation 포함)
+                    filename: audioFilename  // 백엔드에서 반환된 실제 파일명 사용
+                };
+                console.log('[Audio] Payload summary included:', !!payload.summary);
+
+                const response = await fetch('/api/save-to-vectorstore', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    statusDiv.innerHTML = `<span style="color: #10b981;">✅ ${data.message}</span>`;
+                    setTimeout(() => {
+                        statusDiv.innerHTML = '';
+                    }, 5000);
+                } else {
+                    statusDiv.innerHTML = `<span style="color: #dc2626;">❌ ${data.error}</span>`;
+                }
+            } catch (error) {
+                console.error('VectorStore 저장 오류:', error);
+                statusDiv.innerHTML = '<span style="color: #dc2626;">❌ VectorStore 저장 중 오류가 발생했습니다.</span>';
+            } finally {
+                // 버튼 재활성화
+                saveBtn.disabled = false;
+                saveBtn.style.opacity = '1';
+                saveBtn.style.cursor = 'pointer';
+            }
+        });
+
+        // 오디오 변경
+        document.getElementById('changeAudioBtn').addEventListener('click', () => {
+            if (confirm('현재 작업을 종료하고 새로운 오디오를 처리하시겠습니까?')) {
+                // 뷰어 섹션 숨기고 업로드 섹션 표시
+                document.getElementById('audioViewerSection').style.display = 'none';
+                document.getElementById('audioUploadSection').style.display = 'block';
+                selectedAudioFile = null;
+                fileInfo.classList.remove('show');
+                audioSubmitBtn.disabled = true;
+
+                // 요약 초기화
+                document.getElementById('audioSummaryContent').innerHTML = '<p class="summary-placeholder">요약 생성 버튼을 클릭하세요</p>';
+
+                // 채팅 초기화
+                document.getElementById('audioChatMessages').innerHTML = `
+                    <div class="chat-welcome">
+                        회의록 내용에 대해 질문해보세요!
+                    </div>
+                `;
+                audioChatHistory = [];
+
+                // 회의록 초기화
+                document.getElementById('audioTranscriptContent').innerHTML = '';
+                audioSegments = [];
+                audioSessionId = null;
+                audioFileHash = null;
+                audioFilename = null;
+
+                // 오디오 플레이어 정리
+                if (audioElement) {
+                    audioElement.pause();
+                    audioElement.src = '';
+                }
+
+                // 이벤트 리스너 정리
+                if (audioTimeUpdateHandler) {
+                    audioElement.removeEventListener('timeupdate', audioTimeUpdateHandler);
+                    audioTimeUpdateHandler = null;
+                }
+
+                console.log('[Audio] Session cleared. Ready for new audio.');
+            }
+        });
+
+        // 오디오 자동 스크롤 토글
+        document.getElementById('audioAutoScrollToggle').addEventListener('click', function() {
+            audioAutoScrollEnabled = !audioAutoScrollEnabled;
+            this.classList.toggle('active');
+            this.textContent = audioAutoScrollEnabled ? '자동 스크롤: ON' : '자동 스크롤: OFF';
+            console.log(`[Audio] 자동 스크롤 토글: ${audioAutoScrollEnabled ? 'ON' : 'OFF'}`);
+        });
+
+        // 오디오 재생 시간에 따라 현재 세그먼트 하이라이트
+        function highlightCurrentAudioSegment(currentTime) {
+            if (!audioSegments || audioSegments.length === 0) {
+                console.warn('[Audio Highlight] No audio segments available');
+                return;
+            }
+
+            // 현재 시간에 해당하는 세그먼트 찾기
+            let currentSegment = null;
+            for (let i = 0; i < audioSegments.length; i++) {
+                const segment = audioSegments[i];
+                const nextSegment = audioSegments[i + 1];
+
+                if (nextSegment) {
+                    // 현재 시간이 이 세그먼트와 다음 세그먼트 사이에 있는지 확인
+                    if (currentTime >= segment.start_time && currentTime < nextSegment.start_time) {
+                        currentSegment = segment;
+                        break;
+                    }
+                } else {
+                    // 마지막 세그먼트
+                    if (currentTime >= segment.start_time) {
+                        currentSegment = segment;
+                        break;
+                    }
+                }
+            }
+
+            if (currentSegment) {
+                console.log('[Audio Highlight] Found segment:', {
+                    id: currentSegment.id,
+                    speaker: currentSegment.speaker,
+                    start_time: currentSegment.start_time,
+                    text: currentSegment.text.substring(0, 50) + '...'
+                });
+
+                // 모든 세그먼트에서 active-audio 클래스 제거
+                const allSegments = document.querySelectorAll('#audioTranscriptContent .transcript-segment');
+                console.log('[Audio Highlight] Removing active-audio from', allSegments.length, 'segments');
+                allSegments.forEach(seg => seg.classList.remove('active-audio'));
+
+                // 현재 세그먼트에 active-audio 클래스 추가
+                const currentSegmentElement = document.querySelector(
+                    `#audioTranscriptContent .transcript-segment[data-id="${currentSegment.id}"]`
+                );
+
+                if (currentSegmentElement) {
+                    console.log('[Audio Highlight] ✅ Adding active-audio to segment ID:', currentSegment.id);
+                    currentSegmentElement.classList.add('active-audio');
+
+                    // 클래스가 실제로 추가되었는지 확인
+                    const hasClass = currentSegmentElement.classList.contains('active-audio');
+                    console.log('[Audio Highlight] Class added successfully:', hasClass);
+
+                    // 현재 적용된 스타일 확인
+                    const styles = window.getComputedStyle(currentSegmentElement);
+                    console.log('[Audio Highlight] Background:', styles.background);
+                    console.log('[Audio Highlight] Border-left:', styles.borderLeft);
+
+                    // 자동 스크롤이 활성화되어 있으면 회의록 컨테이너 내부에서만 스크롤
+                    if (audioAutoScrollEnabled) {
+                        const transcriptContainer = document.getElementById('audioTranscriptContent');
+
+                        // 더 정확한 위치 계산을 위해 getBoundingClientRect 사용
+                        const containerRect = transcriptContainer.getBoundingClientRect();
+                        const elementRect = currentSegmentElement.getBoundingClientRect();
+
+                        // 컨테이너 기준 상대 위치 계산
+                        const relativeTop = elementRect.top - containerRect.top + transcriptContainer.scrollTop;
+                        const containerHeight = transcriptContainer.clientHeight;
+                        const elementHeight = currentSegmentElement.offsetHeight;
+
+                        // 요소를 컨테이너 중앙에 위치시키기
+                        const scrollTo = relativeTop - (containerHeight / 2) + (elementHeight / 2);
+
+                        transcriptContainer.scrollTo({
+                            top: scrollTo,
+                            behavior: 'smooth'
+                        });
+
+                        console.log('[Audio Highlight] Container height:', containerHeight, 'Element relative top:', relativeTop, 'Scrolling to:', scrollTo);
+                    }
+                } else {
+                    console.error('[Audio Highlight] ❌ Could not find segment element with data-id:', currentSegment.id);
+                    // 모든 세그먼트의 data-id 출력하여 디버깅
+                    const allIds = Array.from(allSegments).map(seg => seg.dataset.id);
+                    console.log('[Audio Highlight] Available segment IDs:', allIds);
+                }
+            }
+        }
+
+        // ========================================
+        // Retriever 검색 탭 로직
+        // ========================================
+
+        // Retriever 폼 제출
+        document.getElementById('retrieverForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const query = document.getElementById('retrieverQuery').value.trim();
+            const sourceType = document.querySelector('input[name="source_type"]:checked').value;
+            const nResults = parseInt(document.getElementById('retrieverResults').value);
+
+            if (!query) {
+                alert('검색어를 입력해주세요.');
+                return;
+            }
+
+            // UI 상태 변경
+            document.getElementById('retrieverStatus').innerHTML = '<p style="color: #666;">검색 중...</p>';
+            document.getElementById('retrieverResultsSection').style.display = 'none';
+
+            try {
+                const requestBody = {
+                    query: query,
+                    n_results: nResults
+                };
+
+                // source_type이 'all'이 아닌 경우에만 추가
+                if (sourceType !== 'all') {
+                    requestBody.source_type = sourceType;
+                }
+
+                const response = await fetch('/api/retriever-search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayRetrieverResults(data.results, query);
+                    document.getElementById('retrieverStatus').innerHTML = '';
+                } else {
+                    document.getElementById('retrieverStatus').innerHTML = `<p style="color: #dc2626;">오류: ${data.error}</p>`;
+                }
+            } catch (error) {
+                console.error('오류:', error);
+                document.getElementById('retrieverStatus').innerHTML = '<p style="color: #dc2626;">검색 중 오류가 발생했습니다.</p>';
+            }
+        });
+
+        // Retriever 검색 결과 표시
+        function displayRetrieverResults(results, query) {
+            const resultsContent = document.getElementById('retrieverResultsContent');
+            const resultInfo = document.getElementById('retrieverResultInfo');
+
+            if (!results || results.length === 0) {
+                resultsContent.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-muted);"><p>검색 결과가 없습니다.</p></div>';
+                document.getElementById('retrieverResultsSection').style.display = 'block';
+                resultInfo.textContent = '검색 결과: 0개';
+                return;
+            }
+
+            resultsContent.innerHTML = '';
+
+            results.forEach((result, index) => {
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'transcript-segment';
+                resultDiv.style.marginBottom = '20px';
+                resultDiv.style.borderLeft = '4px solid var(--primary-color)';
+
+                const metadata = result.metadata;
+                const sourceType = metadata.source_type;
+                const distance = result.distance ? result.distance.toFixed(4) : 'N/A';
+
+                // 요약 검색 결과인 경우 (document_type으로 명시적 구분)
+                if (metadata.document_type === 'summary') {
+                    const sourceIcon = sourceType === 'youtube' ? '🎬' : '🎵';
+                    const sourceName = sourceType === 'youtube' ? 'YouTube' : 'Audio';
+                    const sourceId = metadata.source_id;
+                    const createdAt = metadata.created_at || 'N/A';
+                    const filename = metadata.filename || '';
+
+                    resultDiv.innerHTML = `
+                        <div class="segment-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div>
+                                <span class="segment-speaker" style="background: var(--accent-color, #f59e0b); color: white; padding: 4px 12px; border-radius: 6px; font-weight: 600;">
+                                    📝 ${sourceIcon} ${sourceName} 요약
+                                </span>
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted);">
+                                <span style="padding: 4px 8px; background: rgba(var(--primary-rgb), 0.1); border-radius: 4px;">
+                                    유사도: ${distance}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="segment-text" style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary); border-radius: 8px; line-height: 1.6; max-height: 400px; overflow-y: auto;">
+                            ${marked.parse(result.document)}
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted); padding: 8px 12px; background: rgba(var(--primary-rgb), 0.05); border-radius: 6px;">
+                            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                                <span><strong>Source ID:</strong> ${sourceId}</span>
+                                <span><strong>생성일시:</strong> ${createdAt}</span>
+                                ${filename ? `<span><strong>파일명:</strong> ${filename}</span>` : ''}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // 세그먼트 검색 결과인 경우 (기존 로직)
+                    const sourceIcon = sourceType === 'youtube' ? '🎬' : '🎵';
+                    const sourceName = sourceType === 'youtube' ? 'YouTube' : 'Audio';
+                    const sourceId = metadata.source_id;
+                    const speaker = metadata.speaker;
+                    const startTime = metadata.start_time;
+                    const confidence = (metadata.confidence * 100).toFixed(1);
+                    const filename = metadata.filename || '';
+
+                    const minutes = Math.floor(startTime / 60);
+                    const seconds = Math.floor(startTime % 60);
+                    const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+                    // end_time 포맷팅
+                    let timeRangeStr = timeStr;
+                    if (metadata.end_time) {
+                        const endMinutes = Math.floor(metadata.end_time / 60);
+                        const endSeconds = Math.floor(metadata.end_time % 60);
+                        const endTimeStr = `${String(endMinutes).padStart(2, '0')}:${String(endSeconds).padStart(2, '0')}`;
+                        timeRangeStr = `${timeStr} ~ ${endTimeStr}`;
+                    }
+
+                    resultDiv.innerHTML = `
+                        <div class="segment-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div>
+                                <span class="segment-speaker" style="background: var(--primary-color); color: white; padding: 4px 12px; border-radius: 6px; font-weight: 600;">
+                                    ${sourceIcon} ${sourceName} - 화자 ${speaker}
+                                </span>
+                                <span class="segment-time" style="margin-left: 12px; padding: 4px 12px; background: var(--bg-secondary); border-radius: 6px;">
+                                    ${timeRangeStr}
+                                </span>
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted);">
+                                <span style="padding: 4px 8px; background: rgba(var(--primary-rgb), 0.1); border-radius: 4px;">
+                                    유사도: ${distance}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="segment-text" style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary); border-radius: 8px; line-height: 1.6;">
+                            ${result.document}
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted); padding: 8px 12px; background: rgba(var(--primary-rgb), 0.05); border-radius: 6px;">
+                            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                                <span><strong>Source ID:</strong> ${sourceId}</span>
+                                <span><strong>Segment ID:</strong> ${metadata.segment_id}</span>
+                                <span><strong>Start Time:</strong> ${timeStr}</span>
+                                <span><strong>Confidence:</strong> ${confidence}%</span>
+                                ${filename ? `<span><strong>파일명:</strong> ${filename}</span>` : ''}
+                            </div>
+                        </div>
+                        <div style="margin-top: 8px; padding: 8px 12px; background: rgba(var(--primary-rgb), 0.1); border-radius: 6px; text-align: center; font-size: 0.9rem; color: var(--primary-color); font-weight: 600;">
+                            🎧 클릭하여 재생하기
+                        </div>
+                    `;
+
+                    // 클릭 이벤트: 오디오/비디오 재생 (세그먼트만)
+                    resultDiv.style.cursor = 'pointer';
+                    const endTime = metadata.end_time || null;
+                    resultDiv.addEventListener('click', () => {
+                        playFromRetrieverResult(sourceType, sourceId, startTime, endTime, filename);
+                    });
+                }
+
+                resultsContent.appendChild(resultDiv);
+            });
+
+            document.getElementById('retrieverResultsSection').style.display = 'block';
+            resultInfo.textContent = `검색 결과: ${results.length}개`;
+        }
+
+        // Retriever 결과에서 재생하기 (현재 탭에서)
+        let retrieverAudioStopListener = null;
+        let retrieverYoutubeStopInterval = null;
+
+        async function playFromRetrieverResult(sourceType, sourceId, startTime, endTime, filename) {
+            // 플레이어 섹션 표시
+            document.getElementById('retrieverPlayerSection').style.display = 'block';
+
+            if (sourceType === 'audio') {
+                // 오디오 파일 재생
+                console.log(`[Retriever] Playing audio: ${filename} from ${startTime}s to ${endTime || 'end'}s`);
+
+                // YouTube 플레이어 숨기고 오디오 플레이어 표시
+                document.getElementById('retrieverYoutubePlayerWrapper').style.display = 'none';
+                document.getElementById('retrieverAudioPlayerWrapper').style.display = 'block';
+                document.getElementById('retrieverPlayerTitle').innerHTML = '🎵 오디오 플레이어 (세그먼트 재생)';
+
+                // 오디오 플레이어 가져오기
+                if (!retrieverAudioPlayer) {
+                    retrieverAudioPlayer = document.getElementById('retrieverAudioPlayer');
+                }
+
+                // 기존 stop listener 제거
+                if (retrieverAudioStopListener) {
+                    retrieverAudioPlayer.removeEventListener('timeupdate', retrieverAudioStopListener);
+                }
+
+                // 오디오 파일 경로 구성 (filename 기반)
+                const audioUrl = `/uploads/${filename}`;
+
+                // 오디오 소스 설정
+                retrieverAudioPlayer.src = audioUrl;
+                retrieverAudioPlayer.currentTime = startTime;
+
+                // end_time이 있으면 자동 정지 설정
+                if (endTime) {
+                    retrieverAudioStopListener = function() {
+                        if (retrieverAudioPlayer.currentTime >= endTime) {
+                            retrieverAudioPlayer.pause();
+                            console.log(`[Retriever] Auto-stopped at ${endTime}s`);
+                        }
+                    };
+                    retrieverAudioPlayer.addEventListener('timeupdate', retrieverAudioStopListener);
+                }
+
+                // 로드 후 재생
+                retrieverAudioPlayer.addEventListener('loadedmetadata', function onLoaded() {
+                    retrieverAudioPlayer.currentTime = startTime;
+                    retrieverAudioPlayer.play();
+                    retrieverAudioPlayer.removeEventListener('loadedmetadata', onLoaded);
+                }, { once: true });
+
+                retrieverAudioPlayer.load();
+
+            } else if (sourceType === 'youtube') {
+                // YouTube 영상 재생
+                console.log(`[Retriever] Playing YouTube: ${sourceId} from ${startTime}s to ${endTime || 'end'}s`);
+
+                // 오디오 플레이어 숨기고 YouTube 플레이어 표시
+                document.getElementById('retrieverAudioPlayerWrapper').style.display = 'none';
+                document.getElementById('retrieverYoutubePlayerWrapper').style.display = 'block';
+                document.getElementById('retrieverPlayerTitle').innerHTML = '🎬 YouTube 플레이어 (세그먼트 재생)';
+
+                // 기존 stop interval 제거
+                if (retrieverYoutubeStopInterval) {
+                    clearInterval(retrieverYoutubeStopInterval);
+                }
+
+                // YouTube Player 초기화 또는 비디오 로드
+                if (!retrieverYoutubePlayer) {
+                    retrieverYoutubePlayer = new YT.Player('retrieverYoutubePlayer', {
+                        videoId: sourceId,
+                        width: '100%',
+                        height: '400',
+                        playerVars: {
+                            'autoplay': 1,
+                            'controls': 1,
+                            'start': Math.floor(startTime)
+                        },
+                        events: {
+                            'onReady': (event) => {
+                                event.target.seekTo(startTime, true);
+                                event.target.playVideo();
+
+                                // end_time이 있으면 자동 정지 설정
+                                if (endTime) {
+                                    retrieverYoutubeStopInterval = setInterval(() => {
+                                        const currentTime = event.target.getCurrentTime();
+                                        if (currentTime >= endTime) {
+                                            event.target.pauseVideo();
+                                            clearInterval(retrieverYoutubeStopInterval);
+                                            console.log(`[Retriever] Auto-stopped at ${endTime}s`);
+                                        }
+                                    }, 100);
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    retrieverYoutubePlayer.loadVideoById({
+                        videoId: sourceId,
+                        startSeconds: startTime
+                    });
+                    retrieverYoutubePlayer.playVideo();
+
+                    // end_time이 있으면 자동 정지 설정
+                    if (endTime) {
+                        retrieverYoutubeStopInterval = setInterval(() => {
+                            const currentTime = retrieverYoutubePlayer.getCurrentTime();
+                            if (currentTime >= endTime) {
+                                retrieverYoutubePlayer.pauseVideo();
+                                clearInterval(retrieverYoutubeStopInterval);
+                                console.log(`[Retriever] Auto-stopped at ${endTime}s`);
+                            }
+                        }, 100);
+                    }
+                }
+            }
+
+            // 플레이어 영역으로 스크롤
+            document.getElementById('retrieverPlayerSection').scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }
+
+        // Retriever 플레이어 닫기
+        document.getElementById('retrieverClosePlayerBtn').addEventListener('click', () => {
+            document.getElementById('retrieverPlayerSection').style.display = 'none';
+
+            // 오디오 정지 및 리스너 제거
+            if (retrieverAudioPlayer) {
+                retrieverAudioPlayer.pause();
+                if (retrieverAudioStopListener) {
+                    retrieverAudioPlayer.removeEventListener('timeupdate', retrieverAudioStopListener);
+                    retrieverAudioStopListener = null;
+                }
+            }
+
+            // YouTube 정지 및 interval 제거
+            if (retrieverYoutubePlayer && retrieverYoutubePlayer.pauseVideo) {
+                retrieverYoutubePlayer.pauseVideo();
+            }
+            if (retrieverYoutubeStopInterval) {
+                clearInterval(retrieverYoutubeStopInterval);
+                retrieverYoutubeStopInterval = null;
+            }
+        });
+
+        // ========================================
+        // 내용 질문 탭 로직
+        // ========================================
+
+        // 내용 질문 폼 제출
+        document.getElementById('askContentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const question = document.getElementById('contentQuestion').value.trim();
+            const transcriptN = parseInt(document.getElementById('transcriptCount').value);
+            const summaryN = parseInt(document.getElementById('summaryCount').value);
+
+            if (!question) {
+                alert('질문을 입력해주세요.');
+                return;
+            }
+
+            // 버튼 비활성화 및 텍스트 변경
+            const askContentBtn = document.getElementById('askContentBtn');
+            const askContentBtnText = document.getElementById('askContentBtnText');
+            const originalBtnText = askContentBtnText.textContent;
+
+            askContentBtn.disabled = true;
+            askContentBtnText.textContent = '질문에 대한 답변을 준비중입니다...';
+            askContentBtn.style.opacity = '0.6';
+            askContentBtn.style.cursor = 'not-allowed';
+
+            // UI 상태 변경
+            document.getElementById('askContentStatus').innerHTML = '<p style="color: #666;">🤔 생각 중... (검색 및 답변 생성)</p>';
+            document.getElementById('askContentAnswerSection').style.display = 'none';
+
+            try {
+                const response = await fetch('/api/ask_content', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        transcript_n: transcriptN,
+                        summary_n: summaryN
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayAskContentAnswer(data);
+                    document.getElementById('askContentStatus').innerHTML = '';
+                } else {
+                    document.getElementById('askContentStatus').innerHTML = `<p style="color: #dc2626;">오류: ${data.error}</p>`;
+                }
+            } catch (error) {
+                console.error('오류:', error);
+                document.getElementById('askContentStatus').innerHTML = '<p style="color: #dc2626;">질문 처리 중 오류가 발생했습니다.</p>';
+            } finally {
+                // 버튼 다시 활성화
+                askContentBtn.disabled = false;
+                askContentBtnText.textContent = originalBtnText;
+                askContentBtn.style.opacity = '1';
+                askContentBtn.style.cursor = 'pointer';
+            }
+        });
+
+        // 답변 표시 함수
+        function displayAskContentAnswer(data) {
+            const answerSection = document.getElementById('askContentAnswerSection');
+            const answerContent = document.getElementById('askContentAnswer');
+            const resultInfo = document.getElementById('askContentResultInfo');
+            const transcriptResults = document.getElementById('askContentTranscriptResults');
+            const summaryResults = document.getElementById('askContentSummaryResults');
+
+            // 답변 표시 (마크다운 렌더링)
+            answerContent.innerHTML = marked.parse(data.answer);
+
+            // 검색 결과 개수 표시
+            resultInfo.textContent = `검색: 요약 ${data.summary_results_count}개, 원문 세그먼트 ${data.transcript_results_count}개`;
+
+            // 요약 검색 결과 먼저 표시 (Retriever 스타일)
+            if (data.summary_results && data.summary_results.length > 0) {
+                summaryResults.innerHTML = data.summary_results.map((result, index) => {
+                    const metadata = result.metadata || {};
+                    const subtopic = metadata.subtopic || '전체';
+                    const sourceType = metadata.source_type || 'unknown';
+                    const sourceIcon = sourceType === 'youtube' ? '🎬' : '🎵';
+                    const sourceName = sourceType === 'youtube' ? 'YouTube' : 'Audio';
+                    const sourceId = metadata.source_id || 'Unknown';
+                    const createdAt = metadata.created_at || 'N/A';
+                    const distance = result.distance ? result.distance.toFixed(4) : 'N/A';
+                    const filename = metadata.filename || '';
+
+                    return `
+                        <div class="transcript-segment" style="margin-bottom: 20px; border-left: 4px solid var(--primary-color); padding-left: 0;">
+                            <div class="segment-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <div>
+                                    <span class="segment-speaker" style="background: var(--accent-color, #f59e0b); color: white; padding: 4px 12px; border-radius: 6px; font-weight: 600;">
+                                        📝 ${sourceIcon} ${sourceName} 요약
+                                    </span>
+                                </div>
+                                <div style="font-size: 0.85rem; color: var(--text-muted);">
+                                    <span style="padding: 4px 8px; background: rgba(var(--primary-rgb), 0.1); border-radius: 4px;">
+                                        유사도: ${distance}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="segment-text" style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary); border-radius: 8px; line-height: 1.6; max-height: 400px; overflow-y: auto;">
+                                ${marked.parse(result.document || '')}
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); padding: 8px 12px; background: rgba(var(--primary-rgb), 0.05); border-radius: 6px;">
+                                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                                    <span><strong>Source ID:</strong> ${sourceId}</span>
+                                    <span><strong>소주제:</strong> ${subtopic}</span>
+                                    <span><strong>생성일시:</strong> ${createdAt}</span>
+                                    ${filename ? `<span><strong>파일명:</strong> ${filename}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                summaryResults.innerHTML = '<p style="padding: 15px; color: var(--text-secondary);">검색 결과가 없습니다.</p>';
+            }
+
+            // 전체 검색 결과 표시 (Citation 기반)
+            if (data.transcript_results && data.transcript_results.length > 0) {
+                transcriptResults.innerHTML = data.transcript_results.map((result, index) => {
+                    const metadata = result.metadata || {};
+                    const sourceType = metadata.source_type || 'unknown';
+                    const sourceIcon = sourceType === 'youtube' ? '🎬' : '🎵';
+                    const sourceName = sourceType === 'youtube' ? 'YouTube' : 'Audio';
+                    const sourceId = metadata.source_id || 'Unknown';
+                    const speaker = metadata.speaker || 'Unknown';
+                    const startTime = metadata.start_time || 0;
+                    const confidence = metadata.confidence ? (metadata.confidence * 100).toFixed(1) : 'N/A';
+                    const distance = result.distance ? result.distance.toFixed(4) : 'N/A';
+                    const filename = metadata.filename || '';
+                    const segmentId = metadata.segment_id || 'N/A';
+
+                    const minutes = Math.floor(startTime / 60);
+                    const seconds = Math.floor(startTime % 60);
+                    const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+                    // end_time 포맷팅
+                    let timeRangeStr = timeStr;
+                    if (metadata.end_time) {
+                        const endMinutes = Math.floor(metadata.end_time / 60);
+                        const endSeconds = Math.floor(metadata.end_time % 60);
+                        const endTimeStr = `${String(endMinutes).padStart(2, '0')}:${String(endSeconds).padStart(2, '0')}`;
+                        timeRangeStr = `${timeStr} ~ ${endTimeStr}`;
+                    }
+
+                    return `
+                        <div class="transcript-segment" style="margin-bottom: 20px; border-left: 4px solid var(--primary-color); padding-left: 0;">
+                            <div class="segment-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <div>
+                                    <span class="segment-speaker" style="background: var(--primary-color); color: white; padding: 4px 12px; border-radius: 6px; font-weight: 600;">
+                                        ${sourceIcon} ${sourceName} - 화자 ${speaker}
+                                    </span>
+                                    <span class="segment-time" style="margin-left: 12px; padding: 4px 12px; background: var(--bg-secondary); border-radius: 6px;">
+                                        ${timeRangeStr}
+                                    </span>
+                                </div>
+                                <div style="font-size: 0.85rem; color: var(--text-muted);">
+                                    <span style="padding: 4px 8px; background: rgba(var(--primary-rgb), 0.1); border-radius: 4px;">
+                                        유사도: ${distance}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="segment-text" style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary); border-radius: 8px; line-height: 1.6;">
+                                ${result.document || ''}
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); padding: 8px 12px; background: rgba(var(--primary-rgb), 0.05); border-radius: 6px;">
+                                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                                    <span><strong>Source ID:</strong> ${sourceId}</span>
+                                    <span><strong>Segment ID:</strong> ${segmentId}</span>
+                                    <span><strong>Start Time:</strong> ${timeStr}</span>
+                                    <span><strong>Confidence:</strong> ${confidence}%</span>
+                                    ${filename ? `<span><strong>파일명:</strong> ${filename}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                transcriptResults.innerHTML = '<p style="padding: 15px; color: var(--text-secondary);">인용된 원문 세그먼트가 없습니다.</p>';
+            }
+
+            // 답변 섹션 표시
+            answerSection.style.display = 'block';
+
+            // 스크롤 이동
+            answerSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // ========== 데이터 관리 함수 ==========
+
+        // 데이터 목록 로드
+        async function loadDataList() {
+            try {
+                const response = await fetch('/api/data-management/list');
+                const data = await response.json();
+
+                if (data.success) {
+                    // 통계 표시
+                    displayStats(data.stats);
+
+                    // YouTube 목록 표시
+                    displayYoutubeList(data.youtube);
+
+                    // 오디오 목록 표시
+                    displayAudioList(data.audio);
+                } else {
+                    alert('데이터 로드 실패: ' + data.error);
+                }
+            } catch (error) {
+                console.error('데이터 로드 오류:', error);
+                alert('데이터 로드 중 오류가 발생했습니다.');
+            }
+        }
+
+        // 통계 표시
+        function displayStats(stats) {
+            const statsDiv = document.getElementById('dbStats');
+            statsDiv.innerHTML = `
+                <div style="padding: 15px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid #4CAF50;">
+                    <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 5px;">YouTube 영상</div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary);">${stats.youtube_videos}개</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px;">세그먼트: ${stats.youtube_segments.toLocaleString()}개</div>
+                </div>
+                <div style="padding: 15px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid #2196F3;">
+                    <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 5px;">오디오 파일</div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary);">${stats.audio_files}개</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px;">세그먼트: ${stats.audio_segments.toLocaleString()}개</div>
+                </div>
+            `;
+        }
+
+        // YouTube 목록 표시
+        function displayYoutubeList(youtubeList) {
+            const listDiv = document.getElementById('youtubeList');
+
+            if (youtubeList.length === 0) {
+                listDiv.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 20px;">저장된 YouTube 영상이 없습니다.</p>';
+                return;
+            }
+
+            listDiv.innerHTML = youtubeList.map(item => `
+                <div style="padding: 15px; margin-bottom: 10px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid #FF0000;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 5px;">${item.title}</div>
+                            <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 8px;">
+                                📺 ${item.channel} | 조회수: ${item.view_count.toLocaleString()}회 | 업로드: ${item.upload_date}
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted);">
+                                🎤 세그먼트: ${item.segments_count}개 |
+                                ⏱️ STT: ${item.stt_time.toFixed(1)}초 (${item.stt_service}) |
+                                📅 처리일: ${item.created_at}
+                                ${item.has_summary ? ' | ✅ 요약 있음' : ''}
+                            </div>
+                        </div>
+                        <button onclick="deleteData('youtube', '${item.id}')"
+                                style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 6px; cursor: pointer; margin-left: 10px;">
+                            🗑️ 삭제
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 오디오 목록 표시
+        function displayAudioList(audioList) {
+            const listDiv = document.getElementById('audioList');
+
+            if (audioList.length === 0) {
+                listDiv.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 20px;">저장된 오디오 파일이 없습니다.</p>';
+                return;
+            }
+
+            listDiv.innerHTML = audioList.map(item => `
+                <div style="padding: 15px; margin-bottom: 10px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid #2196F3;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 5px;">${item.filename}</div>
+                            <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 8px;">
+                                📁 ${item.file_path} | 크기: ${formatFileSize(item.file_size)} | 길이: ${(item.duration / 60).toFixed(1)}분
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted);">
+                                🎤 세그먼트: ${item.segments_count}개 |
+                                ⏱️ STT: ${item.stt_time.toFixed(1)}초 (${item.stt_service}) |
+                                📅 처리일: ${item.created_at}
+                                ${item.has_summary ? ' | ✅ 요약 있음' : ''}
+                            </div>
+                        </div>
+                        <button onclick="deleteData('audio', '${item.id}')"
+                                style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 6px; cursor: pointer; margin-left: 10px;">
+                            🗑️ 삭제
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 데이터 삭제
+        async function deleteData(type, id) {
+            const typeName = type === 'youtube' ? 'YouTube 영상' : '오디오 파일';
+
+            if (!confirm(`정말로 이 ${typeName}을(를) 삭제하시겠습니까?\n\n삭제된 데이터는 복구할 수 없습니다.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/data-management/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ type, id })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('삭제되었습니다.');
+                    loadDataList(); // 목록 새로고침
+                } else {
+                    alert('삭제 실패: ' + data.error);
+                }
+            } catch (error) {
+                console.error('삭제 오류:', error);
+                alert('삭제 중 오류가 발생했습니다.');
+            }
+        }
+
+        // 데이터 관리 탭 진입 시 자동 로드
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const tabId = button.dataset.tab;
+                if (tabId === 'data-management-tab') {
+                    loadDataList();
+                }
+            });
+        });
+
+        // Marked.js 라이브러리 로드
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
+        document.head.appendChild(script);
+    </script>
+</body>
+</html>

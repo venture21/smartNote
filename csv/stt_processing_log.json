@@ -1,0 +1,55 @@
+[
+  {
+    "audio_duration": 567.24,
+    "processing_time": 143.42478156089783,
+    "timestamp": "2025-10-30 17:46:10"
+  },
+  {
+    "audio_duration": 567.24,
+    "processing_time": 97.39379501342773,
+    "timestamp": "2025-10-30 18:02:45"
+  },
+  {
+    "audio_duration": 567.24,
+    "processing_time": 79.96808958053589,
+    "timestamp": "2025-10-31 13:04:58"
+  },
+  {
+    "audio_duration": 997.56,
+    "processing_time": 137.1413233280182,
+    "timestamp": "2025-10-31 13:22:24"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 161.87732672691345,
+    "timestamp": "2025-10-31 13:42:50"
+  },
+  {
+    "audio_duration": 567.24,
+    "processing_time": 91.52404117584229,
+    "ratio": 0.16134976584134103,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 14:12:06"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 141.05272030830383,
+    "ratio": 0.11818449354526854,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 14:16:12"
+  },
+  {
+    "audio_duration": 997.56,
+    "processing_time": 106.93958640098572,
+    "ratio": 0.10720115722461378,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 14:20:34"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 26.274841785430908,
+    "ratio": 0.08227136652836511,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 14:23:23"
+  }
+]
