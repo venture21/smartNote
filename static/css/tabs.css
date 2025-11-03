@@ -1,0 +1,424 @@
+/* ===========================================================================
+   탭 및 컴포넌트 스타일
+   youtube_viewer.html의 inline CSS에서 분리됨
+   ========================================================================== */
+
+/* 탭 스타일 */
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.tab-button {
+    padding: 12px 24px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    transition: all 0.3s ease;
+}
+
+.tab-button:hover {
+    color: var(--primary-color);
+    background: rgba(var(--primary-rgb), 0.05);
+}
+
+.tab-button.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* 오디오 업로드 영역 스타일 */
+.file-upload-area {
+    border: 2px dashed var(--border-color);
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    background: var(--bg-secondary);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.file-upload-area:hover {
+    border-color: var(--primary-color);
+    background: rgba(var(--primary-rgb), 0.05);
+}
+
+.file-upload-area.drag-over {
+    border-color: var(--primary-color);
+    background: rgba(var(--primary-rgb), 0.1);
+}
+
+.file-upload-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+}
+
+.file-upload-text {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.file-upload-hint {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.file-info {
+    display: none;
+    margin-top: 20px;
+    padding: 16px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border-left: 4px solid var(--primary-color);
+}
+
+.file-info.show {
+    display: block;
+}
+
+.file-info-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.file-info-item:last-child {
+    margin-bottom: 0;
+}
+
+/* 오디오 플레이어 스타일 */
+.audio-player-wrapper {
+    margin-top: 20px;
+    padding: 20px;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+}
+
+.audio-player-wrapper audio {
+    width: 100%;
+    height: 54px;
+}
+
+/* 오디오 탭 전용 레이아웃 - 플레이어 없이 간결하게 */
+.audio-viewer-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 20px;
+    align-items: start;
+    height: 800px; /* 명확한 높이 설정 */
+}
+
+.audio-left-section {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    height: 100%;
+}
+
+/* 오디오 탭의 회의록 컨테이너가 왼쪽(요약+채팅)과 같은 높이 사용 */
+.audio-viewer-layout .transcript-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: 800px;
+}
+
+.audio-viewer-layout .transcript-header {
+    flex-shrink: 0; /* 헤더는 고정 크기 */
+}
+
+.audio-viewer-layout .transcript-content {
+    flex: 1;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    min-height: 0;
+    height: auto !important;
+    max-height: calc(800px - 80px); /* 전체 높이 - 헤더 높이 */
+}
+
+/* 요약과 채팅 컨테이너도 스크롤 가능하게 */
+.audio-viewer-layout .summary-container,
+.audio-viewer-layout .chat-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.audio-viewer-layout .summary-content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.audio-viewer-layout .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* 오디오/영상 재생 중 현재 대화 하이라이트 */
+.transcript-segment.active-audio {
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0.15) 100%) !important;
+    border-left: 6px solid #2563eb !important;
+    padding-left: 15px !important;
+    margin-left: -10px !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+    transform: scale(1.02) !important;
+}
+
+.transcript-segment.active-audio .segment-header {
+    color: #1d4ed8 !important;
+    font-weight: 700 !important;
+}
+
+.transcript-segment.active-audio .segment-time {
+    color: #2563eb !important;
+    font-weight: 700 !important;
+    background: rgba(59, 130, 246, 0.15);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+/* 모바일 반응형 디자인 */
+@media (max-width: 968px) {
+    /* 오디오 뷰어 레이아웃을 세로로 변경 */
+    .audio-viewer-layout {
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+        gap: 20px;
+    }
+
+    .audio-viewer-layout .transcript-container {
+        height: auto !important;
+        max-height: 600px !important;
+        order: 1; /* 회의록을 맨 위로 */
+    }
+
+    .audio-left-section {
+        order: 2; /* 요약+채팅을 아래로 */
+    }
+
+    .audio-viewer-layout .transcript-content {
+        max-height: 500px !important;
+    }
+
+    .audio-viewer-layout .summary-container,
+    .audio-viewer-layout .chat-container {
+        height: 400px !important;
+    }
+}
+
+@media (max-width: 768px) {
+    /* 모바일 최적화 */
+    .audio-viewer-layout {
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+    }
+
+    .audio-viewer-layout .transcript-container {
+        height: auto !important;
+        max-height: 500px !important;
+        order: 1; /* 회의록을 맨 위로 */
+    }
+
+    .audio-left-section {
+        order: 2; /* 요약+채팅을 아래로 */
+    }
+
+    .audio-viewer-layout .transcript-content {
+        max-height: 400px !important;
+    }
+
+    .audio-viewer-layout .summary-container,
+    .audio-viewer-layout .chat-container {
+        height: 350px !important;
+    }
+
+    /* 오디오 정보 최적화 */
+    .video-info {
+        font-size: 0.85rem !important;
+        padding: 15px !important;
+    }
+
+    .info-row {
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    /* 소형 모바일 */
+    .audio-viewer-layout .transcript-container {
+        max-height: 400px !important;
+    }
+
+    .audio-viewer-layout .transcript-content {
+        max-height: 350px !important;
+    }
+
+    .audio-viewer-layout .summary-container,
+    .audio-viewer-layout .chat-container {
+        height: 300px !important;
+    }
+
+    /* 세그먼트 텍스트 크기 조정 */
+    .transcript-segment {
+        padding: 10px !important;
+        font-size: 0.9rem !important;
+    }
+}
+
+/* 마크다운 콘텐츠 스타일 */
+.markdown-content {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--text-primary);
+}
+
+.markdown-content h1 {
+    font-size: 2em;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+}
+
+.markdown-content h2 {
+    font-size: 1.5em;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+}
+
+.markdown-content h3 {
+    font-size: 1.25em;
+}
+
+.markdown-content p {
+    margin-top: 0;
+    margin-bottom: 16px;
+    line-height: 1.8;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+    margin-top: 0;
+    margin-bottom: 16px;
+    padding-left: 2em;
+}
+
+.markdown-content li {
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+.markdown-content li > p {
+    margin-bottom: 8px;
+}
+
+.markdown-content code {
+    padding: 2px 6px;
+    background: rgba(var(--primary-rgb), 0.1);
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9em;
+}
+
+.markdown-content pre {
+    padding: 16px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+}
+
+.markdown-content pre code {
+    padding: 0;
+    background: none;
+    border-radius: 0;
+}
+
+.markdown-content blockquote {
+    margin: 0 0 16px 0;
+    padding: 0 16px;
+    border-left: 4px solid var(--primary-color);
+    color: var(--text-secondary);
+}
+
+.markdown-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.markdown-content table th,
+.markdown-content table td {
+    border: 1px solid var(--border-color);
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.markdown-content table th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+}
+
+.markdown-content a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.markdown-content a:hover {
+    text-decoration: underline;
+}
+
+.markdown-content strong {
+    font-weight: 600;
+}
+
+.markdown-content em {
+    font-style: italic;
+}
+
+.markdown-content hr {
+    height: 1px;
+    padding: 0;
+    margin: 24px 0;
+    background-color: var(--border-color);
+    border: 0;
+}
+
+.markdown-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    margin: 16px 0;
+}

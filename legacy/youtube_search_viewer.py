@@ -28,6 +28,7 @@ import yt_dlp
 import logging
 from datetime import datetime
 import threading
+import uuid
 import time
 import hashlib
 from mutagen import File as MutagenFile
@@ -39,6 +40,29 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # 환경 변수 로드
 load_dotenv()
+
+# =============================================================================
+# 새로 분리된 modules import (리팩토링)
+# =============================================================================
+# VectorStore 관련 함수들을 새 모듈에서 import
+from modules.vectorstore import (
+    initialize_collections,
+    store_segments_in_vectordb,
+    store_summary_in_vectordb,
+    get_summary_from_vectordb,
+    delete_from_vectorstore,
+    search_vectordb,
+    update_title_in_vectorstore,
+)
+
+# STT 예측 관련 함수들을 새 모듈에서 import
+from modules.stt_prediction import (
+    load_stt_processing_log,
+    save_stt_processing_log,
+    add_stt_processing_record,
+    estimate_stt_processing_time,
+    analyze_stt_prediction_accuracy,
+)
 
 # Flask 앱 생성 (main.py에서 재사용)
 app = Flask(__name__)
@@ -155,12 +179,16 @@ def update_progress(task_id, step, progress, message, estimated_time=None, elaps
         # 남은 예상 시간 계산
         if estimated_time is not None:
             remaining_time = max(0, estimated_time - elapsed_time)
+            # 남은 시간이 예상 시간을 초과하지 않도록 제한
+            remaining_time = min(remaining_time, estimated_time)
             progress_data[task_id][step]["remaining_time"] = remaining_time
 
     # 로깅 (시간 정보 포함)
     log_msg = f"[{task_id}] {step}: {progress}% - {message}"
     if estimated_time is not None and elapsed_time is not None:
         remaining = max(0, estimated_time - elapsed_time)
+        # 남은 시간이 예상 시간을 초과하지 않도록 제한
+        remaining = min(remaining, estimated_time)
         log_msg += f" (예상: {estimated_time:.1f}초, 경과: {elapsed_time:.1f}초, 남음: {remaining:.1f}초)"
     logging.info(log_msg)
 
@@ -1409,13 +1437,18 @@ def parse_mmss_to_seconds(time_str):
 
 def recognize_with_gemini(audio_path, task_id=None, audio_duration=None):
     """
-    Google Gemini STT API로 음성 인식
+    Google Gemini STT API로 음성 인식 (modules.stt 래퍼)
 
     Args:
         audio_path: 오디오 파일 경로
         task_id: 작업 ID (프로그레스 업데이트용)
         audio_duration: 오디오 길이 (초) - 예상 시간 계산용
+
+    Returns:
+        dict: {"segments": [...], "processing_time": float, "detected_language": str}
     """
+    from modules.stt import recognize_with_gemini as stt_recognize
+
     start_time = time.time()
 
     # 예상 처리 시간 계산
@@ -1424,131 +1457,37 @@ def recognize_with_gemini(audio_path, task_id=None, audio_duration=None):
         estimated_time = estimate_stt_processing_time(audio_duration)
         logging.info(f"⏱️ 예상 STT 처리 시간: {estimated_time:.1f}초 (오디오 길이: {audio_duration:.1f}초)")
 
+    # 별도 스레드로 경과 시간 업데이트 (시뮬레이션)
+    stop_progress_update = threading.Event()
+
+    def update_elapsed_time():
+        """경과 시간을 주기적으로 업데이트"""
+        while not stop_progress_update.is_set():
+            elapsed = time.time() - start_time
+
+            if task_id and estimated_time:
+                # 진행률 계산 (최대 95%까지만)
+                progress_percent = min(95, int((elapsed / estimated_time) * 100))
+
+                update_progress(
+                    task_id,
+                    "stt",
+                    progress_percent,
+                    "오디오에서 텍스트 추출 중...",
+                    estimated_time=estimated_time,
+                    elapsed_time=elapsed
+                )
+
+            time.sleep(1)  # 1초마다 업데이트
+
+    # 진행 상황 업데이트 스레드 시작
+    if task_id and estimated_time:
+        progress_thread = threading.Thread(target=update_elapsed_time, daemon=True)
+        progress_thread.start()
+
     try:
-        if task_id:
-            update_progress(
-                task_id,
-                "stt",
-                0,
-                "Gemini STT 시작",
-                estimated_time=estimated_time,
-                elapsed_time=0
-            )
-
-        logging.info(f"🎧 Gemini STT API로 음성 인식 중: {audio_path}")
-
-        # 별도 스레드로 경과 시간 업데이트 (시뮬레이션)
-        stop_progress_update = threading.Event()
-
-        def update_elapsed_time():
-            """경과 시간을 주기적으로 업데이트"""
-            while not stop_progress_update.is_set():
-                elapsed = time.time() - start_time
-
-                if task_id and estimated_time:
-                    # 진행률 계산 (최대 95%까지만)
-                    progress_percent = min(95, int((elapsed / estimated_time) * 100))
-
-                    update_progress(
-                        task_id,
-                        "stt",
-                        progress_percent,
-                        "오디오에서 텍스트 추출 중...",
-                        estimated_time=estimated_time,
-                        elapsed_time=elapsed
-                    )
-
-                time.sleep(1)  # 1초마다 업데이트
-
-        # 진행 상황 업데이트 스레드 시작
-        if task_id and estimated_time:
-            progress_thread = threading.Thread(target=update_elapsed_time, daemon=True)
-            progress_thread.start()
-
-        client = get_gemini_client()
-
-        with open(audio_path, "rb") as f:
-            file_bytes = f.read()
-
-        file_ext = os.path.splitext(audio_path)[1].lower()
-        mime_type_map = {
-            ".wav": "audio/wav",
-            ".mp3": "audio/mp3",
-            ".m4a": "audio/mp4",
-            ".flac": "audio/flac",
-            ".ogg": "audio/ogg",
-        }
-        mime_type = mime_type_map.get(file_ext, "audio/mp3")
-
-        prompt = """
-당신은 전문적인 회의록 작성자입니다. 제공된 오디오 파일을 듣고 다음 작업을 수행해 주십시오:
-1. 전체 대화를 정확하게 텍스트로 변환합니다.
-2. 각 발화에 대해 화자를 숫자로 구분합니다. 발화자의 등장 순서대로 번호를 할당합니다.
-3. 각 발화에 대해 음성 인식의 신뢰도를 0.0~1.0 사이의 값으로 평가합니다.
-4. 최종 결과는 아래의 JSON 형식과 정확히 일치해야 합니다. 각 JSON 객체는 'speaker', 'start_time_mmss', 'confidence', 'text' 키를 포함해야 합니다.
-5. start_time_mmss는 "분:초:밀리초" 형태로 출력합니다. (예: "0:05:200", "1:23:450")
-6. 배경음악과 발화자의 목소리가 섞인 경우 목소리만 잘 구별하여 가져온다.
-7. speaker가 동일한 경우 하나의 행으로 만듭니다. 단, 문장이 5개를 넘어갈 경우 다음 대화로 분리한다.
-
-
-출력 형식:
-[
-    {
-        "speaker": 1,
-        "start_time_mmss": "0:00:000",
-        "confidence": 0.95,
-        "text": "안녕하세요. 회의를 시작하겠습니다."
-    },
-    {
-        "speaker": 2,
-        "start_time_mmss": "0:05:200",
-        "confidence": 0.92,
-        "text": "네, 좋습니다."
-    }
-]
-
-JSON 배열만 출력하고, 추가 설명이나 마크다운 코드 블록은 포함하지 마세요.
-"""
-
-        logging.info("🤖 Gemini 2.5 Pro로 음성 인식 중...")
-
-        response = client.models.generate_content(
-            model="gemini-2.5-pro",
-            contents=[
-                prompt,
-                types.Part.from_bytes(
-                    data=file_bytes,
-                    mime_type=mime_type,
-                ),
-            ],
-        )
-
-        logging.info("✅ Gemini 음성 인식 완료")
-
-        cleaned_response = response.text.strip()
-        cleaned_response = (
-            cleaned_response.replace("```json", "").replace("```", "").strip()
-        )
-
-        result_list = json.loads(cleaned_response)
-
-        normalized_segments = []
-        for idx, segment in enumerate(result_list):
-            time_mmss = segment.get("start_time_mmss", "0:00:000")
-            start_time_seconds = parse_mmss_to_seconds(time_mmss)
-
-            normalized_segments.append(
-                {
-                    "id": idx,
-                    "speaker": segment.get("speaker", 1),
-                    "start_time": start_time_seconds,
-                    "confidence": segment.get("confidence", 0.0),
-                    "text": segment.get("text", ""),
-                }
-            )
-
-        end_time = time.time()
-        processing_time = end_time - start_time
+        # modules/stt.py의 함수 호출 (audio_duration 전달)
+        segments, processing_time, detected_language = stt_recognize(audio_path, task_id, audio_duration)
 
         # 진행 상황 업데이트 스레드 중지
         if task_id and estimated_time:
@@ -1556,44 +1495,58 @@ JSON 배열만 출력하고, 추가 설명이나 마크다운 코드 블록은 �
             if 'progress_thread' in locals():
                 progress_thread.join(timeout=1)
 
+        # 최종 진행률 100%
         if task_id:
+            final_time = time.time() - start_time
             update_progress(
                 task_id,
                 "stt",
                 100,
-                f"Gemini STT 완료",
+                "STT 완료",
                 estimated_time=estimated_time,
-                elapsed_time=processing_time
+                elapsed_time=final_time
             )
 
-        logging.info(f"⏱️ Gemini STT 처리 시간: {processing_time:.2f}초")
+        # STT 처리 시간 로그 저장
+        if audio_duration and segments:
+            add_stt_processing_record(audio_duration, processing_time, source_type="audio")
 
-        return {"segments": normalized_segments, "processing_time": processing_time}
+        logging.info(f"⏱️ STT 처리 시간: {processing_time:.2f}초 (언어: {detected_language})")
+
+        return {
+            "segments": segments,
+            "processing_time": processing_time,
+            "detected_language": detected_language
+        }
 
     except Exception as e:
-        end_time = time.time()
-        processing_time = end_time - start_time
+        processing_time = time.time() - start_time
 
         # 진행 상황 업데이트 스레드 중지
-        if task_id and estimated_time:
+        if 'stop_progress_update' in locals():
             stop_progress_update.set()
             if 'progress_thread' in locals():
                 progress_thread.join(timeout=1)
 
-        logging.error(f"❌ Gemini 오류 발생: {e}")
+        logging.error(f"❌ STT 오류 발생: {e}")
         if task_id:
             update_progress(
                 task_id,
                 "stt",
                 0,
-                "Gemini STT 오류",
+                "STT 오류",
                 estimated_time=estimated_time,
                 elapsed_time=processing_time
             )
-        import traceback
 
+        import traceback
         traceback.print_exc()
-        return {"segments": None, "processing_time": processing_time}
+
+        return {
+            "segments": None,
+            "processing_time": processing_time,
+            "detected_language": 'unknown'
+        }
 
 
 @app.route("/")
@@ -1653,65 +1606,113 @@ def process_youtube():
             # 캐시된 데이터 로드
             row = existing.iloc[0]
 
-            logging.info(f"📂 캐시된 데이터 로드: {row['title']}")
+            logging.info(f"📂 캐시된 데이터 확인: {row['title']}")
 
             # segments JSON 파싱
             segments = json.loads(row["segments_json"])
 
-            # 세션에 저장
-            session_id = request.remote_addr + "_" + secrets.token_hex(8)
-            session_data[session_id] = {
-                "segments": segments,
-                "chat_history": [],
-                "video_id": row["video_id"],  # 요약 저장 시 사용
-                "source_type": "youtube",
-            }
+            # 캐시 데이터 검증: STT 에러 또는 빈 세그먼트인 경우 재처리
+            should_reprocess = False
 
-            # NaN 값 안전 처리
-            view_count = row.get("view_count", 0)
-            if pd.isna(view_count):
-                view_count = 0
+            # 검증 1: 세그먼트가 비어있는 경우
+            if not segments or len(segments) == 0:
+                logging.warning(f"⚠️ 캐시된 데이터에 세그먼트가 없습니다. 재처리합니다.")
+                should_reprocess = True
+
+            # 검증 2: summary가 "STT 처리 실패"인 경우
+            summary_check = row.get("summary", "")
+            if summary_check and "STT 처리 실패" in str(summary_check):
+                logging.warning(f"⚠️ 이전 STT 처리가 실패했습니다. 재처리합니다.")
+                should_reprocess = True
+
+            # 검증 3: 세그먼트가 너무 적은 경우 (오디오가 1분 이상인데 세그먼트가 5개 미만)
+            mp3_path_check = row.get("mp3_path", "")
+            if mp3_path_check and os.path.exists(mp3_path_check) and len(segments) < 5:
+                audio_duration_check = get_audio_duration(mp3_path_check)
+                if audio_duration_check > 60:  # 1분 이상인데 세그먼트가 5개 미만
+                    logging.warning(f"⚠️ 세그먼트가 비정상적으로 적습니다 ({len(segments)}개, 오디오 길이: {audio_duration_check:.1f}초). 재처리합니다.")
+                    should_reprocess = True
+
+            # 재처리가 필요하면 캐시를 무시하고 새로 처리
+            if should_reprocess:
+                logging.info(f"🔄 캐시된 데이터 무시, STT 재처리 시작")
+
+                # 기존 데이터 삭제 (새로 처리한 데이터로 교체하기 위해)
+                try:
+                    history_df = load_youtube_history()
+                    history_df = history_df[history_df["video_id"] != video_id]
+                    save_youtube_history(history_df)
+                    logging.info(f"🗑️ 기존 캐시 데이터 삭제 완료: video_id={video_id}")
+                except Exception as e:
+                    logging.warning(f"⚠️ 기존 데이터 삭제 실패 (무시하고 계속 진행): {e}")
+
+                # 재처리를 위해 아래의 "새로운 처리" 로직으로 진행
+                pass  # if 블록을 빠져나가서 아래의 새로운 처리 로직 실행
             else:
-                view_count = int(view_count)
+                # 캐시 사용: 정상적인 데이터이므로 세션에 저장하고 반환
+                logging.info(f"✅ 캐시된 데이터 사용: {len(segments)}개 세그먼트")
 
-            stt_processing_time = row.get("stt_processing_time", 0.0)
-            if pd.isna(stt_processing_time):
-                stt_processing_time = 0.0
-            else:
-                stt_processing_time = float(stt_processing_time)
-
-            # 요약 로드 (CSV → VectorStore 순서로 확인)
-            summary = row.get("summary", "")
-            if not summary or pd.isna(summary) or summary.strip() == "":
-                # CSV에 요약이 없으면 VectorStore에서 가져오기
-                vectordb_summary = get_summary_from_vectordb(
-                    source_id=row["video_id"], source_type="youtube"
-                )
-                if vectordb_summary:
-                    summary = vectordb_summary
-                    logging.info(f"📦 VectorDB에서 요약 로드: {row['video_id']}")
-
-            return jsonify(
-                {
-                    "success": True,
-                    "cached": True,
-                    "source_type": "youtube",
-                    "message": f"✅ 저장된 데이터를 불러왔습니다: {row['title']}",
-                    "video_id": row["video_id"],
-                    "title": row["title"],
-                    "channel": row.get("channel", "Unknown"),
-                    "view_count": view_count,
-                    "upload_date": row.get("upload_date", ""),
-                    "mp3_path": row.get("mp3_path", ""),
+                # 세션에 저장
+                session_id = request.remote_addr + "_" + secrets.token_hex(8)
+                session_data[session_id] = {
                     "segments": segments,
-                    "total_segments": len(segments),
-                    "stt_service": row["stt_service"],
-                    "stt_processing_time": stt_processing_time,
-                    "session_id": session_id,
-                    "created_at": row["created_at"],
-                    "summary": summary,
+                    "chat_history": [],
+                    "video_id": row["video_id"],  # 요약 저장 시 사용
+                    "source_type": "youtube",
                 }
-            )
+
+                # NaN 값 안전 처리
+                view_count = row.get("view_count", 0)
+                if pd.isna(view_count):
+                    view_count = 0
+                else:
+                    view_count = int(view_count)
+
+                stt_processing_time = row.get("stt_processing_time", 0.0)
+                if pd.isna(stt_processing_time):
+                    stt_processing_time = 0.0
+                else:
+                    stt_processing_time = float(stt_processing_time)
+
+                # 요약 로드 (CSV → VectorStore 순서로 확인)
+                summary = row.get("summary", "")
+                if not summary or pd.isna(summary) or summary.strip() == "":
+                    # CSV에 요약이 없으면 VectorStore에서 가져오기
+                    vectordb_summary = get_summary_from_vectordb(
+                        source_id=row["video_id"], source_type="youtube"
+                    )
+                    if vectordb_summary:
+                        summary = vectordb_summary
+                        logging.info(f"📦 VectorDB에서 요약 로드: {row['video_id']}")
+
+                # 원본 언어 가져오기 (메타데이터 또는 첫 번째 세그먼트에서)
+                original_language = row.get("original_language", "unknown")
+                if not original_language or pd.isna(original_language) or original_language == "":
+                    # 메타데이터에 없으면 첫 번째 세그먼트에서 가져오기
+                    original_language = segments[0].get("original_language", "unknown") if segments else "unknown"
+
+                return jsonify(
+                    {
+                        "success": True,
+                        "cached": True,
+                        "source_type": "youtube",
+                        "message": f"✅ 저장된 데이터를 불러왔습니다: {row['title']}",
+                        "video_id": row["video_id"],
+                        "title": row["title"],
+                        "channel": row.get("channel", "Unknown"),
+                        "view_count": view_count,
+                        "upload_date": row.get("upload_date", ""),
+                        "mp3_path": row.get("mp3_path", ""),
+                        "segments": segments,
+                        "total_segments": len(segments),
+                        "stt_service": row["stt_service"],
+                        "stt_processing_time": stt_processing_time,
+                        "session_id": session_id,
+                        "created_at": row["created_at"],
+                        "summary": summary,
+                        "original_language": original_language,
+                    }
+                )
 
         # 새로운 처리
         logging.info(f"🆕 새로운 YouTube URL 처리: {youtube_url}")
@@ -1747,14 +1748,16 @@ def process_youtube():
                 # MP3 오디오 길이 추출 (예상 시간 계산용)
                 audio_duration = get_audio_duration(mp3_path)
 
-                # 2. STT 처리 (Gemini)
+                # 2. STT 처리 (Gemini) + 언어 감지
                 stt_processing_time = 0.0
                 segments = None
+                detected_language = 'unknown'
 
                 result = recognize_with_gemini(mp3_path, task_id, audio_duration)
                 if result and isinstance(result, dict):
                     segments = result.get("segments")
                     stt_processing_time = result.get("processing_time", 0.0)
+                    detected_language = result.get("detected_language", 'unknown')
 
                 if not segments:
                     # STT 실패 시에도 영상 정보는 DB에 저장 (빈 세그먼트로)
@@ -1803,6 +1806,7 @@ def process_youtube():
                     "stt_processing_time": stt_processing_time,
                     "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "summary": "",
+                    "original_language": detected_language,
                 }
 
                 history_df = load_youtube_history()
@@ -1840,6 +1844,7 @@ def process_youtube():
                     "stt_processing_time": stt_processing_time,
                     "session_id": session_id,
                     "created_at": new_row["created_at"],
+                    "original_language": detected_language,
                 }
 
                 logging.info(f"✅ 백그라운드 처리 완료: {title}")
@@ -1994,6 +1999,12 @@ def process_audio():
                     summary = vectordb_summary
                     logging.info(f"📦 VectorDB에서 요약 로드: {row['filename']}")
 
+            # 원본 언어 가져오기 (메타데이터 또는 첫 번째 세그먼트에서)
+            original_language = row.get("original_language", "unknown")
+            if not original_language or pd.isna(original_language) or original_language == "":
+                # 메타데이터에 없으면 첫 번째 세그먼트에서 가져오기
+                original_language = segments[0].get("original_language", "unknown") if segments else "unknown"
+
             return jsonify(
                 {
                     "success": True,
@@ -2012,6 +2023,7 @@ def process_audio():
                     "session_id": session_id,
                     "created_at": row["created_at"],
                     "summary": summary,
+                    "original_language": original_language,
                 }
             )
 
@@ -2028,16 +2040,21 @@ def process_audio():
         # 백그라운드에서 처리할 함수
         def process_in_background():
             try:
-                # STT 처리 (Gemini)
+                # STT 처리 (Gemini) + 언어 감지
                 stt_processing_time = 0.0
                 segments = None
+                detected_language = 'unknown'
 
                 result = recognize_with_gemini(file_path, task_id, audio_duration)
-                if result and isinstance(result, tuple) and len(result) == 2:
+                if result and isinstance(result, tuple) and len(result) == 3:
+                    segments, stt_processing_time, detected_language = result
+                elif result and isinstance(result, tuple) and len(result) == 2:
                     segments, stt_processing_time = result
+                    detected_language = 'unknown'
                 elif result and isinstance(result, dict):
                     segments = result.get("segments")
                     stt_processing_time = result.get("processing_time", 0.0)
+                    detected_language = result.get("detected_language", 'unknown')
 
                 if not segments:
                     # STT 실패 시에도 파일 정보는 DB에 저장 (빈 세그먼트로)
@@ -2082,6 +2099,7 @@ def process_audio():
                     "stt_processing_time": stt_processing_time,
                     "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "summary": "",
+                    "original_language": detected_language,
                 }
 
                 history_df = load_audio_history()
@@ -2119,6 +2137,7 @@ def process_audio():
                     "stt_processing_time": stt_processing_time,
                     "session_id": session_id,
                     "created_at": new_row["created_at"],
+                    "original_language": detected_language,
                 }
 
                 logging.info(f"✅ 백그라운드 오디오 처리 완료: {filename}")
@@ -2168,6 +2187,13 @@ def serve_mp3(filename):
     """MP3 파일 제공"""
     mp3_path = os.path.abspath(MP3_FOLDER)
     return send_from_directory(mp3_path, filename)
+
+
+@app.route("/tts_audio/<path:filename>")
+def serve_tts_audio(filename):
+    """TTS 오디오 파일 제공"""
+    tts_audio_path = os.path.abspath("tts_audio")
+    return send_from_directory(tts_audio_path, filename)
 
 
 @app.route("/api/summarize", methods=["POST"])
@@ -2775,13 +2801,14 @@ def ask_content():
         data = request.get_json()
         question = data.get("question", "").strip()
         summary_n = data.get("summary_n", 5)  # 요약 검색 개수
+        transcript_n = data.get("transcript_n", 0)  # 전체 검색 개수 (청크 직접 검색)
 
         if not question:
             return jsonify({"success": False, "error": "질문을 입력해주세요."}), 400
 
-        logging.info(f"💬 내용 질문: '{question}' (요약: {summary_n}개)")
+        logging.info(f"💬 내용 질문: '{question}' (요약: {summary_n}개, 전체: {transcript_n}개)")
 
-        # 1. 요약 검색만 수행
+        # 1. 요약 검색 수행
         logging.info("🔍 요약 검색 수행 중...")
         summary_results = search_vectordb(
             query=question,
@@ -2791,7 +2818,20 @@ def ask_content():
         )
         logging.info(f"✅ 요약 검색 완료: {len(summary_results)}개")
 
-        # 2. 요약에서 citation 추출 (청크 번호 기반)
+        # 2. 전체 검색 수행 (Retriever 검색과 동일한 로직)
+        direct_chunk_results = []
+        if transcript_n > 0:
+            logging.info(f"🔍 전체 검색 수행 중... (청크 직접 검색: {transcript_n}개)")
+            direct_chunk_results = search_vectordb(
+                query=question,
+                source_id=None,
+                source_type=None,  # 전체 검색 (youtube + audio)
+                n_results=transcript_n,
+                document_type="chunk",  # 청크만 검색
+            )
+            logging.info(f"✅ 전체 검색 완료: {len(direct_chunk_results)}개")
+
+        # 3. 요약에서 citation 추출 (청크 번호 기반)
         import re
         import json
         cited_segments = []
@@ -2965,7 +3005,7 @@ def ask_content():
 
         logging.info(f"✅ Citation 기반 세그먼트 조회 완료: {len(cited_segments)}개")
 
-        # 3. 컨텍스트 구성 (요약만 사용)
+        # 4. 컨텍스트 구성 (요약 + 전체 검색 결과)
         summary_context = "\n\n".join(
             [
                 f"[요약 검색 결과 {i+1}]\n출처: {r.get('metadata', {}).get('source_id', 'Unknown')}\n제목: {r.get('metadata', {}).get('subtopic', '전체')}\n내용: {r.get('document', '')}"
@@ -2973,14 +3013,31 @@ def ask_content():
             ]
         )
 
-        # 4. RAG 프롬프트 생성 (요약만 사용)
-        rag_prompt = f"""아래 회의 요약을 바탕으로 질문에 답변해주세요.
+        # 전체 검색 결과가 있으면 컨텍스트에 추가
+        transcript_context = ""
+        if direct_chunk_results:
+            transcript_context = "\n\n".join(
+                [
+                    f"[전체 검색 결과 {i+1}]\n출처: {r.get('metadata', {}).get('source_id', 'Unknown')}\n화자: {r.get('metadata', {}).get('speaker', 'N/A')}\n내용: {r.get('document', '')}"
+                    for i, r in enumerate(direct_chunk_results)
+                ]
+            )
+
+        # 5. RAG 프롬프트 생성
+        rag_prompt = f"""아래 회의 요약{"과 전체 검색 결과" if transcript_context else ""}를 바탕으로 질문에 답변해주세요.
 
 **질문:**
 {question}
 
-**참고 자료: 회의 요약**
+**참고 자료:**
+
+[회의 요약]
 {summary_context if summary_context else "(검색 결과 없음)"}
+
+{f'''
+[전체 검색 - 회의록 내용]
+{transcript_context}
+''' if transcript_context else ""}
 
 **답변 작성 방법:**
 1. 참고 자료의 내용을 기반으로 명확하고 간결하게 답변하세요.
@@ -2993,7 +3050,7 @@ def ask_content():
 
 답변:"""
 
-        # 5. Gemini API 호출
+        # 6. Gemini API 호출
         logging.info("🤖 Gemini API 호출 중...")
         client = get_gemini_client()
         response = client.models.generate_content(
@@ -3010,8 +3067,10 @@ def ask_content():
                 "question": question,
                 "transcript_results_count": len(cited_segments),
                 "summary_results_count": len(summary_results),
+                "direct_chunk_results_count": len(direct_chunk_results),
                 "transcript_results": cited_segments,  # citation 기반 세그먼트
                 "summary_results": summary_results,
+                "direct_chunk_results": direct_chunk_results,  # 전체 검색 결과 (Retriever와 동일)
             }
         )
 
@@ -3210,6 +3269,549 @@ def api_data_management_delete():
         logging.error(f"데이터 삭제 오류: {e}")
         import traceback
         traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/translate", methods=["POST"])
+def translate_segments_api():
+    """
+    세그먼트 번역 API
+
+    Request Body:
+        {
+            "data_type": "youtube" | "audio",
+            "data_id": "video_id" | "file_hash",
+            "target_language": "en" | "ja" | "de" | "ko",
+            "source_language": "ko" (optional, default: "ko")
+        }
+
+    Returns:
+        {
+            "success": true,
+            "segments": [...],
+            "message": "번역 완료"
+        }
+    """
+    try:
+        data = request.get_json()
+        data_type = data.get('data_type')
+        data_id = data.get('data_id')
+        target_language = data.get('target_language')
+        source_language = data.get('source_language', 'ko')
+
+        if not data_type or not data_id or not target_language:
+            return jsonify({'success': False, 'error': '필수 파라미터가 누락되었습니다'}), 400
+
+        # 지원되는 언어 확인
+        supported_languages = ['en', 'ja', 'de', 'ko']
+        if target_language not in supported_languages:
+            return jsonify({'success': False, 'error': f'지원되지 않는 언어입니다: {target_language}'}), 400
+
+        # 번역 모듈 import
+        from modules.translation import translate_segments
+        from modules.sqlite_db import (
+            load_youtube_data,
+            load_audio_data,
+            save_translations_youtube,
+            save_translations_audio,
+            get_cached_translation_youtube,
+            get_cached_translation_audio
+        )
+
+        # 먼저 캐시된 번역 확인
+        cached_segments = None
+        if data_type == 'youtube':
+            cached_segments = get_cached_translation_youtube(data_id, target_language)
+        elif data_type == 'audio':
+            cached_segments = get_cached_translation_audio(data_id, target_language)
+
+        # 캐시가 있으면 바로 반환
+        if cached_segments:
+            logging.info(f"✅ 캐시된 번역 사용: {data_type}/{data_id}, {target_language}")
+            return jsonify({
+                'success': True,
+                'segments': cached_segments,
+                'message': f'✅ 캐시된 번역을 불러왔습니다 ({target_language})',
+                'cached': True,
+                'stats': {
+                    'total': len(cached_segments),
+                    'success': len(cached_segments),
+                    'failed': 0
+                }
+            })
+
+        # 캐시가 없으면 세그먼트 로드 및 번역 수행
+        segments = []
+        if data_type == 'youtube':
+            youtube_data = load_youtube_data(video_id=data_id)
+            if not youtube_data:
+                return jsonify({'success': False, 'error': 'YouTube 데이터를 찾을 수 없습니다'}), 404
+            segments = youtube_data[0].get('segments', [])
+        elif data_type == 'audio':
+            audio_data = load_audio_data(file_hash=data_id)
+            if not audio_data:
+                return jsonify({'success': False, 'error': '오디오 데이터를 찾을 수 없습니다'}), 404
+            segments = audio_data[0].get('segments', [])
+        else:
+            return jsonify({'success': False, 'error': '잘못된 data_type입니다'}), 400
+
+        if not segments:
+            return jsonify({'success': False, 'error': '세그먼트가 없습니다'}), 404
+
+        # 번역 수행
+        logging.info(f"🔄 새로운 번역 시작: {data_type}/{data_id}, {source_language} -> {target_language}")
+        translated_segments = translate_segments(segments, target_language, source_language)
+
+        # 실패한 세그먼트 수 계산
+        failed_count = sum(1 for seg in translated_segments if seg.get('translation_failed', False))
+        success_count = len(translated_segments) - failed_count
+
+        # 데이터베이스에 저장
+        if data_type == 'youtube':
+            success = save_translations_youtube(data_id, translated_segments, target_language)
+        else:
+            success = save_translations_audio(data_id, translated_segments, target_language)
+
+        if not success:
+            return jsonify({'success': False, 'error': '번역 저장 중 오류가 발생했습니다'}), 500
+
+        # 경고 메시지 생성
+        message = f'번역이 완료되었습니다 (성공: {success_count}개, 실패: {failed_count}개)'
+        if failed_count > 0:
+            message += f'\n⚠️ {failed_count}개 세그먼트는 원본 텍스트로 표시됩니다.'
+
+        return jsonify({
+            'success': True,
+            'segments': translated_segments,
+            'message': message,
+            'stats': {
+                'total': len(translated_segments),
+                'success': success_count,
+                'failed': failed_count
+            }
+        })
+
+    except Exception as e:
+        logging.error(f"번역 API 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/generate-tts", methods=["POST"])
+def generate_tts_api():
+    """
+    세그먼트 TTS 오디오 생성 API
+
+    Request Body:
+        {
+            "data_type": "youtube" | "audio",
+            "data_id": "video_id" | "file_hash",
+            "target_language": "en" | "ja" | "de" | "ko"
+        }
+
+    Returns:
+        {
+            "success": true,
+            "task_id": "...",
+            "message": "TTS 생성 시작"
+        }
+    """
+    try:
+        data = request.get_json()
+        data_type = data.get('data_type')
+        data_id = data.get('data_id')
+        target_language = data.get('target_language')
+
+        if not data_type or not data_id or not target_language:
+            return jsonify({'success': False, 'error': '필수 파라미터가 누락되었습니다'}), 400
+
+        # task_id 생성
+        task_id = str(uuid.uuid4())
+
+        # 백그라운드 스레드에서 TTS 생성
+        thread = threading.Thread(
+            target=generate_tts_background,
+            args=(task_id, data_type, data_id, target_language)
+        )
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': f'TTS 생성이 시작되었습니다 (언어: {target_language})'
+        })
+
+    except Exception as e:
+        logging.error(f"TTS 생성 API 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def generate_tts_background(task_id: str, data_type: str, data_id: str, target_language: str):
+    """
+    백그라운드에서 TTS 생성 처리
+
+    Args:
+        task_id: 작업 ID
+        data_type: "youtube" | "audio"
+        data_id: video_id | file_hash
+        target_language: 번역 언어 (en, ja, de, ko)
+    """
+    import sqlite3
+    from pathlib import Path
+    from google import genai
+    from google.genai import types
+    import mimetypes
+    import struct
+
+    try:
+        # 진행 상황 초기화
+        progress_data[task_id] = {
+            "tts": {
+                "progress": 0,
+                "message": "TTS 생성 준비 중..."
+            }
+        }
+
+        # TTS 출력 디렉토리 생성
+        TTS_OUTPUT_DIR = "tts_audio"
+        Path(TTS_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+
+        # Gemini 클라이언트 초기화
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY 환경 변수가 설정되지 않았습니다")
+
+        client = genai.Client(api_key=api_key)
+
+        # DB 연결
+        DB_PATH = "csv/smartnote.db"
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # audio_path 컬럼 확인 및 추가
+        try:
+            if data_type == 'youtube':
+                cursor.execute("PRAGMA table_info(youtube_segments)")
+                columns = [row[1] for row in cursor.fetchall()]
+                if 'audio_path' not in columns:
+                    cursor.execute("ALTER TABLE youtube_segments ADD COLUMN audio_path TEXT")
+                    conn.commit()
+            elif data_type == 'audio':
+                cursor.execute("PRAGMA table_info(audio_segments)")
+                columns = [row[1] for row in cursor.fetchall()]
+                if 'audio_path' not in columns:
+                    cursor.execute("ALTER TABLE audio_segments ADD COLUMN audio_path TEXT")
+                    conn.commit()
+        except Exception as e:
+            logging.warning(f"audio_path 컬럼 추가 확인 중 경고: {e}")
+
+        # 세그먼트 조회 (단일 번역 슬롯)
+        if data_type == 'youtube':
+            cursor.execute("""
+                SELECT id, video_id, segment_id, speaker_id, text,
+                       translated_text, translated_language,
+                       audio_path, start_time, end_time
+                FROM youtube_segments
+                WHERE video_id = ?
+                ORDER BY segment_id
+            """, (data_id,))
+        elif data_type == 'audio':
+            cursor.execute("""
+                SELECT id, file_hash, segment_id, speaker_id, text,
+                       translated_text, translated_language,
+                       audio_path, start_time, end_time
+                FROM audio_segments
+                WHERE file_hash = ?
+                ORDER BY segment_id
+            """, (data_id,))
+        else:
+            raise ValueError(f"잘못된 data_type: {data_type}")
+
+        segments = cursor.fetchall()
+        total = len(segments)
+
+        if total == 0:
+            raise ValueError("세그먼트가 없습니다")
+
+        logging.info(f"🔄 TTS 생성 시작: {total}개 세그먼트")
+
+        success_count = 0
+        skip_count = 0
+        fail_count = 0
+
+        # Speaker별 Voice 매핑
+        SPEAKER_VOICES = {
+            1: "Zephyr", 2: "Puck", 3: "Charon", 4: "Kore", 5: "Fenrir",
+            6: "Aoede", 7: "Orbit", 8: "Pegasus", 9: "Vega", 10: "Sirius",
+        }
+
+        def get_voice_for_speaker(speaker_id: int) -> str:
+            voice_id = ((speaker_id - 1) % 10) + 1
+            return SPEAKER_VOICES.get(voice_id, "Zephyr")
+
+        def convert_to_wav(audio_data: bytes, mime_type: str) -> bytes:
+            parameters = parse_audio_mime_type(mime_type)
+            bits_per_sample = parameters["bits_per_sample"]
+            sample_rate = parameters["rate"]
+            num_channels = 1
+            data_size = len(audio_data)
+            bytes_per_sample = bits_per_sample // 8
+            block_align = num_channels * bytes_per_sample
+            byte_rate = sample_rate * block_align
+            chunk_size = 36 + data_size
+
+            header = struct.pack(
+                "<4sI4s4sIHHIIHH4sI",
+                b"RIFF", chunk_size, b"WAVE", b"fmt ", 16, 1,
+                num_channels, sample_rate, byte_rate, block_align,
+                bits_per_sample, b"data", data_size
+            )
+            return header + audio_data
+
+        def parse_audio_mime_type(mime_type: str) -> dict:
+            bits_per_sample = 16
+            rate = 24000
+            parts = mime_type.split(";")
+            for param in parts:
+                param = param.strip()
+                if param.lower().startswith("rate="):
+                    try:
+                        rate_str = param.split("=", 1)[1]
+                        rate = int(rate_str)
+                    except (ValueError, IndexError):
+                        pass
+                elif param.startswith("audio/L"):
+                    try:
+                        bits_per_sample = int(param.split("L", 1)[1])
+                    except (ValueError, IndexError):
+                        pass
+            return {"bits_per_sample": bits_per_sample, "rate": rate}
+
+        # 각 세그먼트 처리
+        for idx, segment in enumerate(segments, 1):
+            segment_id = segment["segment_id"]
+            db_id = segment["id"]
+            speaker_id = segment["speaker_id"] or 1
+
+            # target_language와 매칭되는 번역 확인 (단일 슬롯)
+            if segment["translated_language"] == target_language and segment["translated_text"]:
+                tts_text = segment["translated_text"]
+            else:
+                # 매칭되는 번역이 없으면 원본 텍스트 사용 (fallback)
+                tts_text = segment["text"]
+                logging.warning(f"⚠️  세그먼트 {idx}/{total}: {target_language} 번역 없음, 원본 사용")
+
+            if not tts_text or not tts_text.strip():
+                logging.warning(f"⏭️  세그먼트 {idx}/{total} 건너뛰기: 텍스트 없음")
+                skip_count += 1
+                continue
+
+            # 출력 파일 경로 (언어별로 구분)
+            output_filename = f"{data_id}_{target_language}_seg{segment_id:04d}_spk{speaker_id}.wav"
+            output_path = os.path.join(TTS_OUTPUT_DIR, output_filename)
+
+            # 이미 생성된 파일 확인 (언어별 파일명으로 확인)
+            if os.path.exists(output_path):
+                logging.info(f"⏭️  세그먼트 {idx}/{total} 건너뛰기: 이미 생성됨 ({output_path})")
+
+                # 파일이 이미 존재하는 경우에도 DB에 audio_path 등록
+                try:
+                    if data_type == 'youtube':
+                        cursor.execute("""
+                            UPDATE youtube_segments
+                            SET audio_path = ?
+                            WHERE id = ?
+                        """, (output_path, db_id))
+                    elif data_type == 'audio':
+                        cursor.execute("""
+                            UPDATE audio_segments
+                            SET audio_path = ?
+                            WHERE id = ?
+                        """, (output_path, db_id))
+                    conn.commit()
+                    logging.info(f"📝 DB에 audio_path 등록: {output_path}")
+                except Exception as e:
+                    logging.warning(f"⚠️ DB 업데이트 실패: {e}")
+
+                skip_count += 1
+                progress = int((idx / total) * 100)
+                progress_data[task_id]["tts"]["progress"] = progress
+                progress_data[task_id]["tts"]["message"] = f"세그먼트 {idx}/{total} (스킵)"
+                continue
+
+            # 진행 상황 업데이트
+            progress = int((idx / total) * 100)
+            progress_data[task_id]["tts"]["progress"] = progress
+            progress_data[task_id]["tts"]["message"] = f"세그먼트 {idx}/{total} 생성 중: {tts_text[:30]}..."
+
+            # TTS 생성
+            try:
+                voice_name = get_voice_for_speaker(speaker_id)
+
+                contents = [
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=tts_text)],
+                    ),
+                ]
+
+                generate_content_config = types.GenerateContentConfig(
+                    temperature=1,
+                    response_modalities=["audio"],
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                voice_name=voice_name
+                            )
+                        )
+                    ),
+                )
+
+                audio_data = b""
+                mime_type = None
+
+                for chunk in client.models.generate_content_stream(
+                    model="gemini-2.5-flash-preview-tts",
+                    contents=contents,
+                    config=generate_content_config,
+                ):
+                    if (
+                        chunk.candidates is None
+                        or chunk.candidates[0].content is None
+                        or chunk.candidates[0].content.parts is None
+                    ):
+                        continue
+
+                    if (chunk.candidates[0].content.parts[0].inline_data and
+                        chunk.candidates[0].content.parts[0].inline_data.data):
+                        inline_data = chunk.candidates[0].content.parts[0].inline_data
+                        audio_data += inline_data.data
+                        if mime_type is None:
+                            mime_type = inline_data.mime_type
+
+                if not audio_data:
+                    logging.error(f"❌ 오디오 데이터가 생성되지 않음")
+                    fail_count += 1
+                    continue
+
+                # WAV 변환
+                file_extension = mimetypes.guess_extension(mime_type)
+                if file_extension is None or file_extension != ".wav":
+                    audio_data = convert_to_wav(audio_data, mime_type)
+                    # output_path는 이미 .wav로 끝나도록 설정됨 (3579번 줄)
+
+                # 파일 저장
+                with open(output_path, "wb") as f:
+                    f.write(audio_data)
+
+                # DB 업데이트
+                if data_type == 'youtube':
+                    cursor.execute("""
+                        UPDATE youtube_segments
+                        SET audio_path = ?
+                        WHERE id = ?
+                    """, (output_path, db_id))
+                elif data_type == 'audio':
+                    cursor.execute("""
+                        UPDATE audio_segments
+                        SET audio_path = ?
+                        WHERE id = ?
+                    """, (output_path, db_id))
+
+                conn.commit()
+                success_count += 1
+                logging.info(f"✅ TTS 생성 완료: {output_path} (Voice: {voice_name})")
+
+            except Exception as e:
+                logging.error(f"❌ TTS 생성 오류 (세그먼트 {idx}): {e}")
+                fail_count += 1
+
+        # 완료
+        progress_data[task_id]["completed"] = True
+        progress_data[task_id]["tts"]["progress"] = 100
+        progress_data[task_id]["tts"]["message"] = f"완료! (성공: {success_count}, 건너뜀: {skip_count}, 실패: {fail_count})"
+        progress_data[task_id]["result"] = {
+            "success": True,
+            "total": total,
+            "success_count": success_count,
+            "skip_count": skip_count,
+            "fail_count": fail_count
+        }
+
+        logging.info(f"""
+✅ TTS 생성 완료!
+  총 세그먼트: {total}개
+  성공: {success_count}개
+  건너뜀: {skip_count}개
+  실패: {fail_count}개
+""")
+
+        conn.close()
+
+    except Exception as e:
+        logging.error(f"❌ TTS 생성 백그라운드 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        progress_data[task_id]["completed"] = True
+        progress_data[task_id]["tts"] = {
+            "progress": 0,
+            "message": f"오류 발생: {str(e)}"
+        }
+        progress_data[task_id]["result"] = {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@app.route("/api/get-segments", methods=["GET"])
+def get_segments_api():
+    """
+    세그먼트 조회 API (번역 포함)
+
+    Query Parameters:
+        data_type: "youtube" | "audio"
+        data_id: video_id | file_hash
+        language: (optional) "en" | "ja" | "de" | "ko"
+
+    Returns:
+        {
+            "success": true,
+            "segments": [...]
+        }
+    """
+    try:
+        data_type = request.args.get('data_type')
+        data_id = request.args.get('data_id')
+        language = request.args.get('language')
+
+        if not data_type or not data_id:
+            return jsonify({'success': False, 'error': '필수 파라미터가 누락되었습니다'}), 400
+
+        from modules.sqlite_db import (
+            get_youtube_segments_with_translation,
+            get_audio_segments_with_translation
+        )
+
+        # 세그먼트 조회
+        if data_type == 'youtube':
+            segments = get_youtube_segments_with_translation(data_id, language)
+        elif data_type == 'audio':
+            segments = get_audio_segments_with_translation(data_id, language)
+        else:
+            return jsonify({'success': False, 'error': '잘못된 data_type입니다'}), 400
+
+        return jsonify({
+            'success': True,
+            'segments': segments
+        })
+
+    except Exception as e:
+        logging.error(f"세그먼트 조회 API 오류: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

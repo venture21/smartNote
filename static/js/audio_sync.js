@@ -23,8 +23,6 @@ uploadForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const formData = new FormData(uploadForm);
-    const sttService = formData.get('stt_service');
-    const sttServiceName = sttService === 'gemini' ? 'Gemini STT' : 'Clova STT';
 
     // 제출 버튼 찾기
     const submitButton = uploadForm.querySelector('button[type="submit"]');
@@ -512,3 +510,30 @@ clearChatBtn.addEventListener('click', () => {
         }
     }
 });
+
+// 오디오 볼륨 컨트롤
+const audioVolumeSlider = document.getElementById('audioVolume');
+const audioVolumeValue = document.getElementById('audioVolumeValue');
+
+if (audioVolumeSlider && audioVolumeValue && audioPlayer) {
+    // 슬라이더 배경 업데이트 함수
+    function updateAudioVolumeBackground(value) {
+        const percentage = value;
+        audioVolumeSlider.style.background = `linear-gradient(to right, var(--primary-color) 0%, var(--primary-color) ${percentage}%, #e5e7eb ${percentage}%, #e5e7eb 100%)`;
+    }
+
+    // 초기 볼륨 설정 (80%)
+    const initialVolume = 80;
+    audioPlayer.volume = initialVolume / 100;
+    updateAudioVolumeBackground(initialVolume);
+
+    // 볼륨 변경 이벤트
+    audioVolumeSlider.addEventListener('input', (e) => {
+        const volume = e.target.value;
+        audioVolumeValue.textContent = `${volume}%`;
+        updateAudioVolumeBackground(volume);
+
+        // 오디오 플레이어 볼륨 설정 (0.0 ~ 1.0 범위)
+        audioPlayer.volume = volume / 100;
+    });
+}

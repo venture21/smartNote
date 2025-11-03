@@ -7,13 +7,12 @@
 ## 주요 기능
 
 ✨ **주요 특징**
-- 🎤 **자동 STT**: WAV 파일 업로드 시 Clova/Gemini STT 자동 실행
+- 🎤 **자동 STT**: WAV 파일 업로드 시 Gemini STT 자동 실행
 - 🎧 오디오 재생 시 자동 텍스트 하이라이트
 - 🖱️ 텍스트 클릭 시 해당 시간으로 이동
 - 📊 화자별 색상 구분
 - ⏱️ 타임스탬프 표시
 - 🎯 신뢰도 점수 표시
-- 🔄 **STT 서비스 선택**: Clova 또는 Gemini 선택 가능
 - 📱 반응형 디자인
 - ⌨️ 키보드 단축키 지원
 
@@ -57,14 +56,11 @@ http://localhost:5000
 ### Step 1: 오디오 파일 업로드
 
 1. **오디오 파일** 선택 (.wav, .mp3, .m4a, .flac)
-2. **STT 서비스 선택**
-   - **Clova STT**: 네이버 클로바 (한국어 특화, 빠른 처리)
-   - **Gemini STT**: 구글 제미나이 (최신 AI, 컨텍스트 이해)
-3. "🎤 음성 인식 시작" 버튼 클릭
+2. "🎤 음성 인식 시작" 버튼 클릭
 
 ### Step 2: 자동 음성 인식
 
-- 선택한 STT 서비스가 자동으로 실행됩니다
+- **Gemini STT**가 자동으로 실행됩니다
 - 화자 분리와 타임스탬프가 자동으로 생성됩니다
 - 처리 시간: 1~3분 (오디오 길이에 따라 다름)
 
@@ -124,11 +120,9 @@ python transcript_viewer_flask.py
 
 # 3. WAV 파일 선택 (예: meeting.wav)
 
-# 4. STT 서비스 선택 (Clova 또는 Gemini)
+# 4. "음성 인식 시작" 클릭
 
-# 5. "음성 인식 시작" 클릭
-
-# 6. 자동으로 STT 수행 후 결과 표시!
+# 5. 자동으로 Gemini STT 수행 후 결과 표시!
 ```
 
 ### 방법 2: 기존 오디오 파일 사용
@@ -140,7 +134,7 @@ python transcript_viewer_flask.py
 # 2. Flask 뷰어 실행
 python transcript_viewer_flask.py
 
-# 3. meeting2.wav 업로드 + STT 서비스 선택
+# 3. meeting2.wav 업로드
 ```
 
 ## 기술 스택

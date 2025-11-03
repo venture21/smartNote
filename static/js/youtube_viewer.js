@@ -197,8 +197,6 @@ youtubeForm.addEventListener('submit', async (e) => {
 
     const formData = new FormData(youtubeForm);
     const youtubeUrl = formData.get('youtube_url');
-    const sttService = formData.get('stt_service');
-    const sttServiceName = sttService === 'gemini' ? 'Gemini STT' : 'Clova STT';
 
     // 제출 버튼 찾기
     const submitButton = youtubeForm.querySelector('button[type="submit"]');
@@ -400,17 +398,27 @@ const sendChatBtn = document.getElementById('sendChatBtn');
 const clearChatBtn = document.getElementById('clearChatBtn');
 const chatLoading = document.getElementById('chatLoading');
 
-// 요약 생성
-generateSummaryBtn.addEventListener('click', async () => {
+// 영상 탭 요약 버튼
+const videoGenerateSummaryBtn = document.getElementById('videoGenerateSummaryBtn');
+const videoSummaryContent = document.getElementById('videoSummaryContent');
+const videoSummaryLoading = document.getElementById('videoSummaryLoading');
+
+// 오디오 탭 요약 버튼
+const audioGenerateSummaryBtn = document.getElementById('audioGenerateSummaryBtn');
+const audioSummaryContent = document.getElementById('audioSummaryContent');
+const audioSummaryLoading = document.getElementById('audioSummaryLoading');
+
+// 요약 생성 공통 함수
+async function generateSummary(summaryContentElement, summaryLoadingElement, summaryButton) {
     if (!segments || segments.length === 0) {
         alert('회의록 데이터가 없습니다.');
         return;
     }
 
     // 로딩 표시
-    summaryLoading.style.display = 'block';
-    summaryContent.innerHTML = '<p class="summary-placeholder">요약 생성 중...</p>';
-    generateSummaryBtn.disabled = true;
+    summaryLoadingElement.style.display = 'block';
+    summaryContentElement.innerHTML = '<p class="summary-placeholder">요약 생성 중...</p>';
+    summaryButton.disabled = true;
 
     try {
         const response = await fetch('/api/summarize', {
@@ -429,19 +437,40 @@ generateSummaryBtn.addEventListener('click', async () => {
         if (result.success) {
             // 마크다운을 HTML로 간단 변환
             const htmlContent = convertMarkdownToHtml(result.summary);
-            summaryContent.innerHTML = htmlContent;
+            summaryContentElement.innerHTML = htmlContent;
         } else {
-            summaryContent.innerHTML = `<p class="error-message">❌ ${result.error}</p>`;
+            summaryContentElement.innerHTML = `<p class="error-message">❌ ${result.error}</p>`;
         }
 
     } catch (error) {
         console.error('Summary error:', error);
-        summaryContent.innerHTML = `<p class="error-message">❌ 요약 생성 실패: ${error.message}</p>`;
+        summaryContentElement.innerHTML = `<p class="error-message">❌ 요약 생성 실패: ${error.message}</p>`;
     } finally {
-        summaryLoading.style.display = 'none';
-        generateSummaryBtn.disabled = false;
+        summaryLoadingElement.style.display = 'none';
+        summaryButton.disabled = false;
     }
-});
+}
+
+// 요약 생성 버튼 이벤트 리스너 (기존)
+if (generateSummaryBtn) {
+    generateSummaryBtn.addEventListener('click', async () => {
+        await generateSummary(summaryContent, summaryLoading, generateSummaryBtn);
+    });
+}
+
+// 영상 탭 요약 생성 버튼
+if (videoGenerateSummaryBtn) {
+    videoGenerateSummaryBtn.addEventListener('click', async () => {
+        await generateSummary(videoSummaryContent, videoSummaryLoading, videoGenerateSummaryBtn);
+    });
+}
+
+// 오디오 탭 요약 생성 버튼
+if (audioGenerateSummaryBtn) {
+    audioGenerateSummaryBtn.addEventListener('click', async () => {
+        await generateSummary(audioSummaryContent, audioSummaryLoading, audioGenerateSummaryBtn);
+    });
+}
 
 // 간단한 마크다운 -> HTML 변환
 function convertMarkdownToHtml(markdown) {
@@ -638,6 +667,11 @@ function initYouTubePlayer(videoId) {
 // 플레이어 준비 완료
 function onPlayerReady(event) {
     console.log('✅ YouTube 플레이어 준비 완료');
+
+    // 초기 볼륨 설정 (20%)
+    const initialVolume = 20;
+    event.target.setVolume(initialVolume);
+
     updateDuration();
 }
 
@@ -769,6 +803,33 @@ function seekToSegment(startTime) {
     }
 }
 
+// YouTube 볼륨 컨트롤
+const youtubeVolumeSlider = document.getElementById('youtubeVolume');
+const youtubeVolumeValue = document.getElementById('youtubeVolumeValue');
+
+if (youtubeVolumeSlider && youtubeVolumeValue) {
+    // 슬라이더 배경 업데이트 함수
+    function updateYoutubeVolumeBackground(value) {
+        const percentage = value;
+        youtubeVolumeSlider.style.background = `linear-gradient(to right, var(--primary-color) 0%, var(--primary-color) ${percentage}%, #e5e7eb ${percentage}%, #e5e7eb 100%)`;
+    }
+
+    // 초기 배경 설정
+    updateYoutubeVolumeBackground(youtubeVolumeSlider.value);
+
+    // 볼륨 변경 이벤트
+    youtubeVolumeSlider.addEventListener('input', (e) => {
+        const volume = e.target.value;
+        youtubeVolumeValue.textContent = `${volume}%`;
+        updateYoutubeVolumeBackground(volume);
+
+        // YouTube 플레이어가 준비되어 있으면 볼륨 설정
+        if (youtubePlayer && youtubePlayer.setVolume) {
+            youtubePlayer.setVolume(volume);
+        }
+    });
+}
+
 // 페이지 로드 완료 메시지
 console.log('🎬 영상 검색 엔진 v0.1이 준비되었습니다.');
 console.log('기능:');
@@ -779,3 +840,4 @@ console.log('  - 회의록 요약');
 console.log('  - AI 채팅');
 console.log('  - 처리 이력 캐싱');
 console.log('  - YouTube 플레이어 동기화');
+console.log('  - 볼륨 컨트롤');

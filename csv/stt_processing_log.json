@@ -51,5 +51,446 @@
     "ratio": 0.08227136652836511,
     "source_type": "youtube",
     "timestamp": "2025-10-31 14:23:23"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 49.23177456855774,
+    "ratio": 0.15415374918137614,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 14:56:34"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 68.53969860076904,
+    "ratio": 0.2146104136944498,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 15:00:06"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 30.105220317840576,
+    "ratio": 0.09426498684226528,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 15:05:57"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 46.45080518722534,
+    "ratio": 0.14544602210373406,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 15:14:15"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 57.76279425621033,
+    "ratio": 0.18086594228667346,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 15:18:53"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 41.26763701438904,
+    "ratio": 0.129216568392541,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 15:21:43"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 32.939074754714966,
+    "ratio": 0.10313830676434385,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 15:32:51"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 42.56963109970093,
+    "ratio": 0.13329335155588828,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 15:40:26"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 38.83479166030884,
+    "ratio": 0.12159888172988163,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 15:43:11"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 48.50312089920044,
+    "ratio": 0.15187220040580285,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 15:45:28"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 118.26304936408997,
+    "ratio": 0.3703033784351907,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 16:05:06"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 44.863587379455566,
+    "ratio": 0.14047615095894256,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 16:13:17"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 37.66842222213745,
+    "ratio": 0.1179467643036793,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 16:16:13"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761895125.2358594,
+    "ratio": 5516817.981876266,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 16:23:59"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761895125.2358594,
+    "ratio": 5516817.981876266,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 16:23:59"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761895447.8642852,
+    "ratio": 5516818.992085259,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 16:29:17"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761895447.8642852,
+    "ratio": 5516818.992085259,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 16:29:17"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761895885.2651827,
+    "ratio": 5516820.361667991,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 16:36:40"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761895885.2651827,
+    "ratio": 5516820.361667991,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 16:36:40"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761896497.9095385,
+    "ratio": 5516822.279970249,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 16:46:48"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761896497.9095385,
+    "ratio": 5516822.279970249,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 16:46:48"
+  },
+  {
+    "audio_duration": 567.24,
+    "processing_time": 1761902061.1771474,
+    "ratio": 3106096.2928868686,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 18:23:15"
+  },
+  {
+    "audio_duration": 567.24,
+    "processing_time": 1761902061.1771474,
+    "ratio": 3106096.2928868686,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 18:23:15"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761904092.8343084,
+    "ratio": 5516846.0610778425,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 18:53:23"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761904092.8343084,
+    "ratio": 5516846.0610778425,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 18:53:23"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761920035.2369277,
+    "ratio": 5516895.979675258,
+    "source_type": "audio",
+    "timestamp": "2025-10-31 23:18:57"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761920035.2369277,
+    "ratio": 5516895.979675258,
+    "source_type": "youtube",
+    "timestamp": "2025-10-31 23:18:57"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761923257.5440936,
+    "ratio": 5516906.069312184,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 00:12:54"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761923257.5440936,
+    "ratio": 5516906.069312184,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 00:12:54"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761923458.0456643,
+    "ratio": 5516906.697119512,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 00:16:08"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761923458.0456643,
+    "ratio": 5516906.697119512,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 00:16:08"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761923850.1128511,
+    "ratio": 5516907.924754049,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 00:22:40"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761923850.1128511,
+    "ratio": 5516907.924754049,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 00:22:40"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761924304.5677981,
+    "ratio": 5516909.347736148,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 00:30:00"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761924304.5677981,
+    "ratio": 5516909.347736148,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 00:30:01"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761924512.6995919,
+    "ratio": 5516909.999435109,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 00:33:43"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761924512.6995919,
+    "ratio": 5516909.999435109,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 00:33:43"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761924898.0684314,
+    "ratio": 5516911.206095887,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 00:40:08"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761924898.0684314,
+    "ratio": 5516911.206095887,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 00:40:08"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761925242.4420419,
+    "ratio": 5516912.284393057,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 00:45:45"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761925242.4420419,
+    "ratio": 5516912.284393057,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 00:45:45"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761925531.8215723,
+    "ratio": 5516913.190493639,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 00:50:34"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761925531.8215723,
+    "ratio": 5516913.190493639,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 00:50:34"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761925706.281082,
+    "ratio": 5516913.736758479,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 00:53:29"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761925706.281082,
+    "ratio": 5516913.736758479,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 00:53:29"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761926198.3905919,
+    "ratio": 5516915.277643946,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 01:01:48"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761926198.3905919,
+    "ratio": 5516915.277643946,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 01:01:48"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761926927.6391363,
+    "ratio": 5516917.5610553855,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 01:13:50"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761926927.6391363,
+    "ratio": 5516917.5610553855,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 01:13:50"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761931317.9026508,
+    "ratio": 5516931.307778647,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 02:27:09"
+  },
+  {
+    "audio_duration": 319.368,
+    "processing_time": 1761931317.9026508,
+    "ratio": 5516931.307778647,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 02:27:09"
+  },
+  {
+    "audio_duration": 567.24,
+    "processing_time": 1761932056.6040497,
+    "ratio": 3106149.1724914494,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 02:43:19"
+  },
+  {
+    "audio_duration": 567.24,
+    "processing_time": 1761932056.6040497,
+    "ratio": 3106149.1724914494,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 02:43:19"
+  },
+  {
+    "audio_duration": 567.24,
+    "processing_time": 1761933040.0470812,
+    "ratio": 3106150.9062250215,
+    "source_type": "audio",
+    "timestamp": "2025-11-01 02:59:42"
+  },
+  {
+    "audio_duration": 567.24,
+    "processing_time": 1761933040.0470812,
+    "ratio": 3106150.9062250215,
+    "source_type": "youtube",
+    "timestamp": "2025-11-01 02:59:42"
+  },
+  {
+    "audio_duration": 3398.52,
+    "processing_time": 1762126766.7512965,
+    "ratio": 518498.27770655946,
+    "source_type": "audio",
+    "timestamp": "2025-11-03 09:35:42"
+  },
+  {
+    "audio_duration": 3398.52,
+    "processing_time": 1762126766.7512965,
+    "ratio": 518498.27770655946,
+    "source_type": "youtube",
+    "timestamp": "2025-11-03 09:35:42"
+  },
+  {
+    "audio_duration": 4017.744,
+    "processing_time": 1762136872.422765,
+    "ratio": 438588.63890351524,
+    "source_type": "audio",
+    "timestamp": "2025-11-03 11:33:26"
+  },
+  {
+    "audio_duration": 4017.744,
+    "processing_time": 1762136872.422765,
+    "ratio": 438588.63890351524,
+    "source_type": "youtube",
+    "timestamp": "2025-11-03 11:33:26"
+  },
+  {
+    "audio_duration": 3398.52,
+    "processing_time": 1762142176.0690198,
+    "ratio": 518502.8118325094,
+    "source_type": "audio",
+    "timestamp": "2025-11-03 13:04:01"
+  },
+  {
+    "audio_duration": 3398.52,
+    "processing_time": 1762142176.0690198,
+    "ratio": 518502.8118325094,
+    "source_type": "youtube",
+    "timestamp": "2025-11-03 13:04:01"
+  },
+  {
+    "audio_duration": 2539.2,
+    "processing_time": 1762145479.1097507,
+    "ratio": 693976.6379606769,
+    "source_type": "audio",
+    "timestamp": "2025-11-03 13:52:41"
+  },
+  {
+    "audio_duration": 2539.2,
+    "processing_time": 1762145479.1097507,
+    "ratio": 693976.6379606769,
+    "source_type": "youtube",
+    "timestamp": "2025-11-03 13:52:41"
   }
 ]

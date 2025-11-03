@@ -1239,3 +1239,72 @@ header p {
     color: var(--secondary-text);
     font-style: italic;
 }
+
+/* 볼륨 컨트롤 */
+.volume-control {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background-color: #f8fafc;
+    border-radius: 8px;
+    margin-top: 8px;
+}
+
+.volume-control label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 120px;
+}
+
+.volume-slider {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(to right, #e5e7eb 0%, var(--primary-color) 0%);
+    outline: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+    background: #4338ca;
+    transform: scale(1.1);
+}
+
+.volume-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+}
+
+.volume-slider::-moz-range-thumb:hover {
+    background: #4338ca;
+    transform: scale(1.1);
+}
+
+.volume-control span {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    min-width: 45px;
+    text-align: right;
+}

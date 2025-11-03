@@ -1,0 +1,31 @@
+INFO:root:✅ OpenAI Embeddings 사용
+INFO:chromadb.telemetry.product.posthog:Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+INFO:root:✅ LangChain VectorStore 초기화 완료
+INFO:root:   - YouTube VectorStore 초기화됨
+INFO:root:   - Audio VectorStore 초기화됨
+INFO:root:   - Summary VectorStore 초기화됨
+INFO:root:✅ Routes import 완료
+============================================================
+🎬 SmartNote - 영상/오디오 검색 엔진 (리팩토링 버전)
+============================================================
+URL: http://127.0.0.1:5000
+============================================================
+모듈 구조:
+  ✅ config.py - 설정
+  ✅ modules/utils.py - 유틸리티
+  ✅ modules/database.py - 데이터베이스 관리
+  ✅ modules/sqlite_db.py - SQLite 관리
+  ✅ modules/text_processing.py - 텍스트 처리 및 청킹
+  ✅ modules/stt.py - Gemini STT
+  ✅ modules/stt_prediction.py - STT 처리 시간 예측
+  ✅ modules/youtube.py - YouTube 다운로드
+  ✅ modules/vectorstore.py - VectorStore 관리
+  ✅ modules/translation.py - 번역
+============================================================
+주의: legacy 폴더는 하위 호환성을 위해 유지됩니다.
+      모든 핵심 기능은 modules로 분리되었습니다.
+============================================================
+ * Serving Flask app 'legacy.youtube_search_viewer'
+ * Debug mode: on
+Address already in use
+Port 5000 is in use by another program. Either identify and stop that program, or start the server with a different port.

@@ -22,6 +22,7 @@ CHROMA_DB_FOLDER = "chroma_db"
 # CSV 파일 경로
 YOUTUBE_HISTORY_CSV = os.path.join(CSV_FOLDER, "youtube_history.csv")
 AUDIO_HISTORY_CSV = os.path.join(CSV_FOLDER, "audio_history.csv")
+STT_PROCESSING_LOG = os.path.join(CSV_FOLDER, "stt_processing_log.json")
 
 # 허용된 오디오 파일 확장자
 ALLOWED_AUDIO_EXTENSIONS = {

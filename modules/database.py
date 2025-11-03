@@ -43,6 +43,7 @@ def load_youtube_history():
                     "stt_processing_time",
                     "created_at",
                     "summary",
+                    "original_language",
                 ]
             )
 
@@ -54,6 +55,8 @@ def load_youtube_history():
             df["summary"] = ""
         if "stt_processing_time" not in df.columns:
             df["stt_processing_time"] = 0.0
+        if "original_language" not in df.columns:
+            df["original_language"] = "unknown"
 
         # NaN 값 처리
         df["summary"] = df["summary"].fillna("")
@@ -61,6 +64,7 @@ def load_youtube_history():
         df["view_count"] = df["view_count"].fillna(0)
         df["channel"] = df["channel"].fillna("Unknown")
         df["upload_date"] = df["upload_date"].fillna("")
+        df["original_language"] = df["original_language"].fillna("unknown")
 
         logging.info(f"📋 YouTube 이력 로드 완료: {len(df)}개 항목")
         return df
@@ -80,6 +84,7 @@ def load_youtube_history():
                 "stt_processing_time",
                 "created_at",
                 "summary",
+                "original_language",
             ]
         )
 
@@ -109,6 +114,7 @@ def save_youtube_history(df):
                 segments=segments,
                 stt_service=row.get('stt_service', 'gemini'),
                 stt_processing_time=float(row.get('stt_processing_time', 0.0)) if not pd.isna(row.get('stt_processing_time')) else 0.0,
+                detected_language=row.get('original_language', 'unknown'),
                 summary=row.get('summary', '')
             )
 
@@ -137,6 +143,7 @@ def load_audio_history():
                     "stt_processing_time",
                     "created_at",
                     "summary",
+                    "original_language",
                 ]
             )
 
@@ -150,11 +157,14 @@ def load_audio_history():
             df["stt_processing_time"] = 0.0
         if "audio_duration" not in df.columns:
             df["audio_duration"] = 0.0
+        if "original_language" not in df.columns:
+            df["original_language"] = "unknown"
 
         # NaN 값 처리
         df["summary"] = df["summary"].fillna("")
         df["stt_processing_time"] = df["stt_processing_time"].fillna(0.0)
         df["audio_duration"] = df["audio_duration"].fillna(0.0)
+        df["original_language"] = df["original_language"].fillna("unknown")
 
         logging.info(f"📋 오디오 이력 로드 완료: {len(df)}개 항목")
         return df
@@ -172,6 +182,7 @@ def load_audio_history():
                 "stt_processing_time",
                 "created_at",
                 "summary",
+                "original_language",
             ]
         )
 
@@ -199,6 +210,7 @@ def save_audio_history(df):
                 segments=segments,
                 stt_service=row.get('stt_service', 'gemini'),
                 stt_processing_time=float(row.get('stt_processing_time', 0.0)) if not pd.isna(row.get('stt_processing_time')) else 0.0,
+                detected_language=row.get('original_language', 'unknown'),
                 summary=row.get('summary', '')
             )
 
