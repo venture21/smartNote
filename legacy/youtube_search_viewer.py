@@ -1619,6 +1619,7 @@ def process_youtube():
     try:
         data = request.get_json()
         youtube_url = data.get("youtube_url", "").strip()
+        chunk_duration = data.get("chunk_duration", 30)  # 기본값 30분
 
         if not youtube_url:
             return (
@@ -1808,8 +1809,20 @@ def process_youtube():
                 segments = None
                 detected_language = 'unknown'
 
-                result = recognize_with_gemini(mp3_path, task_id, audio_duration)
-                if result and isinstance(result, dict):
+                # 청크 처리 STT 사용
+                from modules.stt import recognize_with_gemini_chunked
+                result = recognize_with_gemini_chunked(
+                    mp3_path,
+                    task_id=task_id,
+                    audio_duration=audio_duration,
+                    chunk_duration_minutes=chunk_duration,
+                    overlap_seconds=25
+                )
+
+                # 결과 파싱 (tuple 형태: segments, processing_time, detected_language)
+                if result and isinstance(result, tuple) and len(result) == 3:
+                    segments, stt_processing_time, detected_language = result
+                elif result and isinstance(result, dict):
                     segments = result.get("segments")
                     stt_processing_time = result.get("processing_time", 0.0)
                     detected_language = result.get("detected_language", 'unknown')
@@ -1943,6 +1956,9 @@ def process_audio():
     캐싱 기능 포함.
     """
     try:
+        # 청크 duration 받기
+        chunk_duration = int(request.form.get("chunk_duration", 30))  # 기본값 30분
+
         # 파일 확인
         if "audio_file" not in request.files:
             return jsonify({"success": False, "error": "오디오 파일이 없습니다."}), 400
@@ -2104,7 +2120,17 @@ def process_audio():
                 segments = None
                 detected_language = 'unknown'
 
-                result = recognize_with_gemini(file_path, task_id, audio_duration)
+                # 청크 처리 STT 사용
+                from modules.stt import recognize_with_gemini_chunked
+                result = recognize_with_gemini_chunked(
+                    file_path,
+                    task_id=task_id,
+                    audio_duration=audio_duration,
+                    chunk_duration_minutes=chunk_duration,
+                    overlap_seconds=25
+                )
+
+                # 결과 파싱 (tuple 형태: segments, processing_time, detected_language)
                 if result and isinstance(result, tuple) and len(result) == 3:
                     segments, stt_processing_time, detected_language = result
                 elif result and isinstance(result, tuple) and len(result) == 2:

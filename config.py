@@ -44,3 +44,8 @@ for folder in [MP4_FOLDER, MP3_FOLDER, CSV_FOLDER, UPLOADS_FOLDER, CHROMA_DB_FOL
 # API 키
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# STT 청크 처리 설정
+DEFAULT_CHUNK_DURATION = 30  # 기본 청크 길이 (분)
+CHUNK_OVERLAP_SECONDS = 25  # 청크 간 중복 시간 (초)
+AVAILABLE_CHUNK_DURATIONS = [10, 20, 30]  # 선택 가능한 청크 길이 (분)

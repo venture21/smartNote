@@ -58,6 +58,22 @@
                             >
                         </div>
 
+                        <div class="form-group" style="margin-top: 16px;">
+                            <label for="videoChunkDuration">🔪 오디오 분할 시간 (긴 파일 처리용)</label>
+                            <select
+                                id="videoChunkDuration"
+                                name="chunk_duration"
+                                style="width: 100%; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem; background: white;"
+                            >
+                                <option value="10">10분 (짧은 청크, 안정성 높음)</option>
+                                <option value="20">20분 (균형)</option>
+                                <option value="30" selected>30분 (긴 청크, 빠름)</option>
+                            </select>
+                            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;">
+                                💡 긴 오디오 파일은 선택한 시간만큼 분할하여 처리합니다. 짧을수록 안정적이지만 처리 시간이 늘어납니다.
+                            </p>
+                        </div>
+
                         <button type="submit" class="btn-primary" id="videoSubmitBtn">
                             <span class="btn-icon">🎤</span>
                             <span id="videoSubmitBtnText">영상 처리 시작</span>
@@ -268,6 +284,22 @@
                                 <strong>파일 형식:</strong>
                                 <span id="fileType">-</span>
                             </div>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 16px;">
+                            <label for="audioChunkDuration">🔪 오디오 분할 시간 (긴 파일 처리용)</label>
+                            <select
+                                id="audioChunkDuration"
+                                name="chunk_duration"
+                                style="width: 100%; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem; background: white;"
+                            >
+                                <option value="10">10분 (짧은 청크, 안정성 높음)</option>
+                                <option value="20">20분 (균형)</option>
+                                <option value="30" selected>30분 (긴 청크, 빠름)</option>
+                            </select>
+                            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;">
+                                💡 긴 오디오 파일은 선택한 시간만큼 분할하여 처리합니다. 짧을수록 안정적이지만 처리 시간이 늘어납니다.
+                            </p>
                         </div>
 
                         <button type="submit" class="btn-primary" id="audioSubmitBtn" disabled>

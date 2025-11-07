@@ -66,6 +66,7 @@ document.getElementById('youtubeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const youtubeUrl = document.getElementById('youtubeUrl').value.trim();
+    const chunkDuration = parseInt(document.getElementById('videoChunkDuration').value);
 
     if (!youtubeUrl) {
         alert('YouTube URL을 입력해주세요.');
@@ -97,7 +98,8 @@ document.getElementById('youtubeForm').addEventListener('submit', async (e) => {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                youtube_url: youtubeUrl
+                youtube_url: youtubeUrl,
+                chunk_duration: chunkDuration
             })
         });
 
@@ -1147,8 +1149,11 @@ document.getElementById('audioForm').addEventListener('submit', async (e) => {
         return;
     }
 
+    const chunkDuration = parseInt(document.getElementById('audioChunkDuration').value);
+
     const formData = new FormData();
     formData.append('audio_file', selectedAudioFile);
+    formData.append('chunk_duration', chunkDuration);
 
     document.getElementById('audioUploadStatus').innerHTML = '<p style="color: #666;">처리 중...</p>';
     document.getElementById('audioProgressSection').style.display = 'block';

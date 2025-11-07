@@ -6,6 +6,9 @@ import os
 import logging
 import time
 import json
+import tempfile
+from difflib import SequenceMatcher
+from pydub import AudioSegment
 from google import genai
 from google.genai import types
 
@@ -603,3 +606,366 @@ def recognize_with_gemini(audio_path, task_id=None, audio_duration=None):
             )
 
         return None, 0.0, "unknown"
+
+
+def split_audio_with_overlap(
+    audio_path, chunk_duration_minutes=30, overlap_seconds=25
+):
+    """
+    긴 오디오 파일을 중복 구간과 함께 분할
+
+    Args:
+        audio_path: 오디오 파일 경로
+        chunk_duration_minutes: 각 청크의 길이 (분)
+        overlap_seconds: 청크 간 중복 구간 (초)
+
+    Returns:
+        list: [(chunk_file_path, start_offset_seconds, end_offset_seconds), ...]
+    """
+    logging.info(f"🔪 오디오 분할 시작: {audio_path}")
+
+    try:
+        # 오디오 파일 로드
+        audio = AudioSegment.from_file(audio_path)
+        total_duration_ms = len(audio)
+        total_duration_sec = total_duration_ms / 1000.0
+
+        logging.info(f"📏 총 오디오 길이: {total_duration_sec:.2f}초 ({total_duration_sec/60:.2f}분)")
+
+        # 분할이 필요한지 확인
+        chunk_duration_ms = chunk_duration_minutes * 60 * 1000
+        if total_duration_ms <= chunk_duration_ms:
+            logging.info("⏭️  분할이 필요 없는 길이입니다.")
+            return [(audio_path, 0, total_duration_sec)]
+
+        # 분할 수행
+        overlap_ms = overlap_seconds * 1000
+        chunks = []
+        start_ms = 0
+        chunk_index = 0
+
+        while start_ms < total_duration_ms:
+            # 청크 종료 시점 계산
+            end_ms = min(start_ms + chunk_duration_ms, total_duration_ms)
+
+            # 청크 추출
+            chunk = audio[start_ms:end_ms]
+
+            # 임시 파일로 저장
+            chunk_file = tempfile.NamedTemporaryFile(
+                suffix=os.path.splitext(audio_path)[1],
+                delete=False
+            )
+            chunk_file_path = chunk_file.name
+            chunk_file.close()
+
+            chunk.export(chunk_file_path, format=os.path.splitext(audio_path)[1][1:])
+
+            start_sec = start_ms / 1000.0
+            end_sec = end_ms / 1000.0
+
+            chunks.append((chunk_file_path, start_sec, end_sec))
+
+            logging.info(
+                f"📦 청크 {chunk_index + 1} 생성: "
+                f"{start_sec:.2f}s ~ {end_sec:.2f}s "
+                f"(길이: {(end_sec - start_sec) / 60:.2f}분)"
+            )
+
+            # 다음 청크 시작 지점 (중복 구간 고려)
+            start_ms = end_ms - overlap_ms
+            chunk_index += 1
+
+            # 마지막 청크면 종료
+            if end_ms >= total_duration_ms:
+                break
+
+        logging.info(f"✅ 오디오 분할 완료: {len(chunks)}개 청크")
+        return chunks
+
+    except Exception as e:
+        logging.error(f"❌ 오디오 분할 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return [(audio_path, 0, None)]
+
+
+def find_best_overlap_match(text1, text2, min_match_length=10):
+    """
+    두 텍스트에서 중복되는 가장 긴 부분을 찾음
+
+    Args:
+        text1: 첫 번째 텍스트 (이전 청크의 끝부분)
+        text2: 두 번째 텍스트 (다음 청크의 시작부분)
+        min_match_length: 최소 매칭 길이 (문자 수)
+
+    Returns:
+        tuple: (text1에서의 매칭 시작 위치, text2에서의 매칭 종료 위치)
+    """
+    # 텍스트를 단어 단위로 분할
+    words1 = text1.split()
+    words2 = text2.split()
+
+    # 최소 단어 수
+    min_words = max(3, min_match_length // 5)
+
+    best_match = None
+    best_ratio = 0.0
+
+    # text1의 끝부분에서 가능한 시작점들을 탐색
+    search_start = max(0, len(words1) - 100)  # 뒤쪽 100단어만 탐색
+
+    for i in range(search_start, len(words1)):
+        # text2의 앞부분에서 매칭 시도
+        for j in range(min(len(words2), 100)):  # 앞쪽 100단어만 탐색
+            # 가능한 매칭 길이들을 시도
+            for length in range(
+                min_words,
+                min(len(words1) - i, len(words2) - j) + 1
+            ):
+                seq1 = " ".join(words1[i : i + length])
+                seq2 = " ".join(words2[j : j + length])
+
+                # 유사도 계산
+                ratio = SequenceMatcher(None, seq1, seq2).ratio()
+
+                if ratio > best_ratio and ratio > 0.8:  # 80% 이상 유사
+                    best_ratio = ratio
+                    best_match = (i, j + length, length, ratio)
+
+    if best_match:
+        i, j, length, ratio = best_match
+        logging.info(
+            f"🔗 중복 구간 발견: "
+            f"{length}단어 매칭 (유사도: {ratio:.2%})"
+        )
+        # text1에서 매칭 시작 위치, text2에서 매칭 종료 위치 반환
+        return (i, j)
+
+    logging.warning("⚠️  중복 구간을 찾지 못함, 단순 연결")
+    return (len(words1), 0)
+
+
+def merge_segment_lists(segments_list, chunk_info_list, overlap_seconds=25):
+    """
+    여러 청크의 세그먼트 리스트를 병합
+
+    Args:
+        segments_list: 각 청크의 세그먼트 리스트 [segments1, segments2, ...]
+        chunk_info_list: 각 청크의 정보 [(start_offset, end_offset), ...]
+        overlap_seconds: 중복 구간 길이 (초)
+
+    Returns:
+        list: 병합된 세그먼트 리스트
+    """
+    if not segments_list or len(segments_list) == 0:
+        return []
+
+    if len(segments_list) == 1:
+        return segments_list[0]
+
+    logging.info(f"🔗 세그먼트 병합 시작: {len(segments_list)}개 청크")
+
+    merged = []
+
+    for chunk_idx, (segments, chunk_info) in enumerate(zip(segments_list, chunk_info_list)):
+        start_offset, end_offset = chunk_info
+
+        if chunk_idx == 0:
+            # 첫 번째 청크는 전체 추가
+            merged.extend(segments)
+            logging.info(f"✅ 청크 0: {len(segments)}개 세그먼트 추가")
+        else:
+            # 이전 청크의 끝부분과 현재 청크의 시작부분에서 중복 찾기
+            prev_chunk_start_offset = chunk_info_list[chunk_idx - 1][0]
+
+            # 이전 청크의 마지막 N개 세그먼트 텍스트
+            prev_segments = segments_list[chunk_idx - 1]
+            prev_text = " ".join([s.get("text", "") for s in prev_segments[-20:]])
+
+            # 현재 청크의 처음 N개 세그먼트 텍스트
+            curr_text = " ".join([s.get("text", "") for s in segments[:20]])
+
+            # 중복 구간 찾기
+            if prev_text and curr_text:
+                prev_word_idx, curr_word_idx = find_best_overlap_match(prev_text, curr_text)
+
+                # 중복을 기준으로 현재 청크에서 추가할 부분 결정
+                # 현재 청크의 세그먼트 중 중복 이후 부분만 추가
+
+                # 현재 청크 세그먼트의 텍스트를 단어 단위로 계산
+                word_count = 0
+                skip_until_idx = 0
+
+                for idx, seg in enumerate(segments):
+                    seg_words = len(seg.get("text", "").split())
+                    word_count += seg_words
+                    if word_count >= curr_word_idx:
+                        skip_until_idx = idx + 1
+                        break
+
+                segments_to_add = segments[skip_until_idx:]
+                logging.info(
+                    f"✅ 청크 {chunk_idx}: "
+                    f"{len(segments_to_add)}개 세그먼트 추가 "
+                    f"(처음 {skip_until_idx}개 중복 제거)"
+                )
+            else:
+                # 중복을 찾지 못한 경우, 단순히 중복 시간 기준으로 제거
+                segments_to_add = [
+                    s for s in segments
+                    if s.get("start_time", 0) >= overlap_seconds
+                ]
+                logging.warning(
+                    f"⚠️  청크 {chunk_idx}: 텍스트 매칭 실패, "
+                    f"시간 기준으로 {len(segments_to_add)}개 세그먼트 추가"
+                )
+
+            # 시간 오프셋 조정
+            for seg in segments_to_add:
+                if "start_time" in seg and seg["start_time"] is not None:
+                    seg["start_time"] += start_offset
+                if "end_time" in seg and seg["end_time"] is not None:
+                    seg["end_time"] += start_offset
+
+            merged.extend(segments_to_add)
+
+    # ID 재할당
+    for idx, seg in enumerate(merged, 1):
+        seg["id"] = idx
+
+    logging.info(f"✅ 병합 완료: 총 {len(merged)}개 세그먼트")
+    return merged
+
+
+def recognize_with_gemini_chunked(
+    audio_path,
+    task_id=None,
+    audio_duration=None,
+    chunk_duration_minutes=30,
+    overlap_seconds=25
+):
+    """
+    긴 오디오 파일을 청크로 나누어 처리 후 병합
+
+    Args:
+        audio_path: 오디오 파일 경로
+        task_id: 진행 상황 추적용 ID
+        audio_duration: 오디오 총 길이 (초)
+        chunk_duration_minutes: 각 청크 길이 (분)
+        overlap_seconds: 청크 간 중복 시간 (초)
+
+    Returns:
+        tuple: (segments, processing_time, detected_language)
+    """
+    from modules.utils import update_progress
+
+    overall_start_time = time.time()
+
+    try:
+        if task_id:
+            update_progress(task_id, "stt", 0, "오디오 분할 중...")
+
+        # 오디오 분할
+        chunk_info_list = split_audio_with_overlap(
+            audio_path,
+            chunk_duration_minutes=chunk_duration_minutes,
+            overlap_seconds=overlap_seconds
+        )
+
+        if len(chunk_info_list) == 1 and chunk_info_list[0][0] == audio_path:
+            # 분할이 필요 없는 경우 기존 함수 사용
+            logging.info("⏭️  청크 처리 불필요, 일반 처리로 전환")
+            return recognize_with_gemini(audio_path, task_id, audio_duration)
+
+        # 각 청크 처리
+        all_segments = []
+        detected_languages = []
+        temp_files = []
+
+        for chunk_idx, (chunk_path, start_offset, end_offset) in enumerate(chunk_info_list):
+            if task_id:
+                progress = int((chunk_idx / len(chunk_info_list)) * 90)
+                update_progress(
+                    task_id,
+                    "stt",
+                    progress,
+                    f"청크 {chunk_idx + 1}/{len(chunk_info_list)} 처리 중..."
+                )
+
+            logging.info(
+                f"🎯 청크 {chunk_idx + 1}/{len(chunk_info_list)} 처리: "
+                f"{start_offset:.2f}s ~ {end_offset:.2f}s"
+            )
+
+            # 청크의 길이 계산
+            chunk_duration = end_offset - start_offset
+
+            # STT 수행
+            segments, proc_time, lang = recognize_with_gemini(
+                chunk_path,
+                task_id=None,  # 개별 청크는 진행 상황 업데이트 안함
+                audio_duration=chunk_duration
+            )
+
+            if segments:
+                all_segments.append(segments)
+                detected_languages.append(lang)
+
+                # 임시 파일 기록 (나중에 삭제)
+                if chunk_path != audio_path:
+                    temp_files.append(chunk_path)
+            else:
+                logging.error(f"❌ 청크 {chunk_idx + 1} 처리 실패")
+
+        # 세그먼트 병합
+        if task_id:
+            update_progress(task_id, "stt", 95, "세그먼트 병합 중...")
+
+        merged_segments = merge_segment_lists(
+            all_segments,
+            [(start, end) for _, start, end in chunk_info_list],
+            overlap_seconds=overlap_seconds
+        )
+
+        # 언어 결정 (가장 많이 나온 언어)
+        if detected_languages:
+            from collections import Counter
+            detected_language = Counter(detected_languages).most_common(1)[0][0]
+        else:
+            detected_language = "unknown"
+
+        # 임시 파일 정리
+        for temp_file in temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+                    logging.debug(f"🗑️  임시 파일 삭제: {temp_file}")
+            except Exception as e:
+                logging.warning(f"⚠️  임시 파일 삭제 실패: {temp_file}, {e}")
+
+        processing_time = time.time() - overall_start_time
+
+        logging.info(
+            f"✅ 청크 처리 완료: {len(merged_segments)}개 세그먼트, "
+            f"언어: {detected_language} ({processing_time:.2f}초)"
+        )
+
+        if task_id:
+            update_progress(
+                task_id,
+                "stt",
+                100,
+                f"STT 완료: {len(merged_segments)}개 세그먼트"
+            )
+
+        return merged_segments, processing_time, detected_language
+
+    except Exception as e:
+        logging.error(f"❌ 청크 처리 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # 실패 시 기존 방식으로 fallback
+        logging.info("🔄 일반 처리로 fallback")
+        return recognize_with_gemini(audio_path, task_id, audio_duration)

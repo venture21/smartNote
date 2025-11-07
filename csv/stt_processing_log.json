@@ -82,5 +82,12 @@
     "ratio": 0.09146044350242803,
     "source_type": "youtube",
     "timestamp": "2025-11-05 03:47:38"
+  },
+  {
+    "audio_duration": 5697.096,
+    "processing_time": 2057.8431227207184,
+    "ratio": 0.3612091357984346,
+    "source_type": "youtube",
+    "timestamp": "2025-11-08 01:02:22"
   }
 ]
