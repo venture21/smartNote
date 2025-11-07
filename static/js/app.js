@@ -2748,6 +2748,9 @@ document.head.appendChild(script);
 let ttsAudioElements = {}; // 세그먼트별 TTS 오디오 엘리먼트
 let currentTtsSegment = null; // 현재 재생 중인 TTS 세그먼트
 let ttsEnabled = false; // TTS 재생 활성화 여부
+let ttsPlaybackHistory = []; // TTS 재생 이력 (디버깅용)
+let ttsHasVideoPaused = false; // TTS가 의도적으로 YouTube를 일시정지시켰는지 여부
+let ttsResumeTimer = null; // YouTube 재개 타이머
 
 // TTS 오디오 초기화
 function initializeTtsAudio(dataType) {
@@ -2778,6 +2781,7 @@ function initializeTtsAudio(dataType) {
 
             // 재생 속도는 메타데이터 로드 후 세그먼트 길이에 맞춰 동적으로 설정
             audio.addEventListener('loadedmetadata', () => {
+                console.log(`[TTS 타이밍] 세그먼트 ${idx} 메타데이터 로드 완료, readyState: ${audio.readyState}, duration: ${audio.duration}s`);
                 if (segment.end_time && segment.start_time) {
                     const segmentDuration = segment.end_time - segment.start_time;
                     const ttsDuration = audio.duration;
@@ -2786,19 +2790,79 @@ function initializeTtsAudio(dataType) {
                         // TTS 길이를 세그먼트 길이에 맞추기 위한 재생 속도 계산
                         const idealRate = ttsDuration / segmentDuration;
 
-                        audio.playbackRate = idealRate;
-                        console.log(`[TTS] 세그먼트 ${idx} 재생 속도: ${idealRate.toFixed(2)}x (TTS: ${ttsDuration.toFixed(2)}s, 세그먼트: ${segmentDuration.toFixed(2)}s)`);
+                        // 배속을 0.85x ~ 1.3x 범위로 제한
+                        const clampedRate = Math.max(0.85, Math.min(1.3, idealRate));
+                        audio.playbackRate = clampedRate;
+
+                        // 1.3x를 초과하는 경우 YouTube 일시정지가 필요함을 표시
+                        if (idealRate > 1.3 && dataType === 'video') {
+                            audio.needsVideoPause = true;
+                            console.log(`[TTS] 세그먼트 ${idx} 재생 속도: ${clampedRate.toFixed(2)}x (YouTube 일시정지 필요, 원래 계산값: ${idealRate.toFixed(2)}x, TTS: ${ttsDuration.toFixed(2)}s, 세그먼트: ${segmentDuration.toFixed(2)}s)`);
+                        } else if (idealRate !== clampedRate) {
+                            audio.needsVideoPause = false;
+                            console.log(`[TTS] 세그먼트 ${idx} 재생 속도: ${clampedRate.toFixed(2)}x (제한됨, 원래 계산값: ${idealRate.toFixed(2)}x, TTS: ${ttsDuration.toFixed(2)}s, 세그먼트: ${segmentDuration.toFixed(2)}s)`);
+                        } else {
+                            audio.needsVideoPause = false;
+                            console.log(`[TTS] 세그먼트 ${idx} 재생 속도: ${clampedRate.toFixed(2)}x (TTS: ${ttsDuration.toFixed(2)}s, 세그먼트: ${segmentDuration.toFixed(2)}s)`);
+                        }
                     } else {
                         audio.playbackRate = 1.0;
+                        audio.needsVideoPause = false;
                     }
                 } else {
                     audio.playbackRate = 1.0;
+                    audio.needsVideoPause = false;
                 }
             });
 
-            // 오디오 로드 오류 처리
+            // TTS 재생 완료 시 처리 (안전장치)
+            audio.addEventListener('ended', () => {
+                console.log(`[TTS] 세그먼트 ${idx} TTS 재생 완료 (ended 이벤트)`);
+                // 재생 이력 기록
+                ttsPlaybackHistory.push({
+                    segment: idx,
+                    action: 'ended',
+                    needsVideoPause: audio.needsVideoPause,
+                    time: new Date().toISOString()
+                });
+
+                // TTS가 일찍 끝난 경우 타이머 취소 및 YouTube 재개
+                if (ttsResumeTimer) {
+                    clearTimeout(ttsResumeTimer);
+                    ttsResumeTimer = null;
+                    console.log(`[TTS] TTS 조기 종료, 타이머 취소`);
+                }
+
+                // YouTube가 일시정지된 상태라면 재개
+                if (ttsHasVideoPaused && dataType === 'video' && youtubePlayer) {
+                    console.log(`[TTS] TTS 종료로 인한 YouTube 재개 (세그먼트 ${idx})`);
+                    try {
+                        ttsHasVideoPaused = false;
+                        youtubePlayer.playVideo();
+                        ttsPlaybackHistory.push({
+                            segment: idx,
+                            action: 'youtube_resume_on_ended',
+                            time: new Date().toISOString()
+                        });
+                    } catch (err) {
+                        console.error(`[TTS] YouTube 재생 오류:`, err);
+                    }
+                }
+            });
+
+            // 오디오 로드 오류 처리 - YouTube도 복구
             audio.addEventListener('error', (e) => {
                 console.error(`[TTS] 세그먼트 ${idx} 오디오 로드 오류:`, segment.audio_path, e);
+                // TTS 오류 시에도 YouTube 재생 복구
+                if (audio.needsVideoPause && dataType === 'video' && youtubePlayer) {
+                    console.log(`[TTS] 오류 발생, YouTube 다시 재생 (세그먼트 ${idx})`);
+                    try {
+                        ttsHasVideoPaused = false; // 플래그 해제
+                        youtubePlayer.playVideo();
+                    } catch (err) {
+                        console.error(`[TTS] YouTube 재생 복구 오류:`, err);
+                    }
+                }
             });
 
             // 볼륨 설정 (audioVolume 슬라이더에서 가져옴)
@@ -2814,7 +2878,7 @@ function initializeTtsAudio(dataType) {
             ttsAudioElements[idx] = audio;
             ttsCount++;
 
-            console.log(`[TTS] 세그먼트 ${idx}: ${segment.audio_path}`);
+            console.log(`[TTS 타이밍] 세그먼트 ${idx} Audio 객체 생성 완료: ${segment.audio_path}, readyState: ${audio.readyState}`);
         }
     });
 
@@ -2848,7 +2912,14 @@ function startVideoTtsSync() {
 
     // 100ms마다 현재 시간 확인하여 TTS 재생
     window.videoTtsSyncInterval = setInterval(() => {
-        if (!ttsEnabled || !youtubePlayer) return;
+        if (!ttsEnabled) {
+            console.log('[TTS 이벤트] TTS 비활성화 상태 (video)');
+            return;
+        }
+        if (!youtubePlayer) {
+            console.log('[TTS 이벤트] YouTube 플레이어 없음');
+            return;
+        }
 
         try {
             const currentTime = youtubePlayer.getCurrentTime();
@@ -2856,10 +2927,18 @@ function startVideoTtsSync() {
 
             // 재생 중일 때만 TTS 동기화
             if (playerState === 1) { // YT.PlayerState.PLAYING
+                ttsHasVideoPaused = false; // 비디오가 재생 중이면 플래그 해제
                 syncTtsWithTime(currentTime, 'video');
             } else {
-                // 일시정지/정지 시 TTS도 정지
-                stopCurrentTts();
+                // TTS가 의도적으로 일시정지시킨 경우는 TTS를 멈추지 않음
+                if (ttsHasVideoPaused) {
+                    console.log(`[TTS 이벤트] YouTube 일시정지 상태지만 TTS가 의도적으로 멈춘 것이므로 TTS 계속 재생 (playerState: ${playerState})`);
+                    // TTS는 계속 재생, 아무것도 하지 않음
+                } else {
+                    // 사용자가 일시정지/정지한 경우에만 TTS도 정지
+                    console.log(`[TTS 이벤트] YouTube 일시정지/정지 (사용자 액션, playerState: ${playerState})`);
+                    stopCurrentTts();
+                }
             }
         } catch (error) {
             console.error('[TTS] YouTube 동기화 오류:', error);
@@ -2884,7 +2963,11 @@ function startAudioTtsSync() {
 
     // timeupdate 이벤트로 TTS 동기화
     window.audioTtsTimeUpdateHandler = () => {
-        if (!ttsEnabled) return;
+        if (!ttsEnabled) {
+            console.log('[TTS 이벤트] TTS 비활성화 상태 (audio)');
+            return;
+        }
+        console.log(`[TTS 이벤트] Audio timeupdate - 현재 시간: ${audioPlayer.currentTime.toFixed(2)}s`);
         syncTtsWithTime(audioPlayer.currentTime, 'audio');
     };
     audioPlayer.addEventListener('timeupdate', window.audioTtsTimeUpdateHandler);
@@ -2906,6 +2989,7 @@ function syncTtsWithTime(currentTime, dataType) {
 
     if (currentSegmentIdx === -1) {
         // 해당하는 세그먼트 없음
+        console.log(`[TTS 이벤트] 현재 시간 ${currentTime.toFixed(2)}s에 해당하는 세그먼트 없음 (${dataType})`);
         if (currentTtsSegment !== null) {
             stopCurrentTts();
         }
@@ -2916,22 +3000,97 @@ function syncTtsWithTime(currentTime, dataType) {
     const ttsAudio = ttsAudioElements[currentSegmentIdx];
 
     if (!ttsAudio) {
+        console.log(`[TTS 이벤트] 세그먼트 ${currentSegmentIdx}에 TTS 오디오 없음 (${dataType})`);
         return; // TTS 오디오가 없는 세그먼트
     }
 
     // 새로운 세그먼트로 변경
     if (currentTtsSegment !== currentSegmentIdx) {
+        console.log(`[TTS 이벤트] 세그먼트 변경 감지: ${currentTtsSegment} → ${currentSegmentIdx} (시간: ${currentTime.toFixed(2)}s, ${dataType})`);
         // 이전 TTS 정지
         stopCurrentTts();
 
         try {
             // 세그먼트 시작 시 처음부터 재생
             ttsAudio.currentTime = 0;
-            ttsAudio.play().catch(err => {
-                console.error(`[TTS] 재생 오류 (세그먼트 ${currentSegmentIdx}):`, err);
+
+            // TTS 오디오 준비 상태 확인
+            console.log(`[TTS 타이밍] 세그먼트 ${currentSegmentIdx} 재생 시도 - readyState: ${ttsAudio.readyState}, paused: ${ttsAudio.paused}, duration: ${ttsAudio.duration}s, src: ${ttsAudio.src}`);
+
+            // 기존 재개 타이머 취소
+            if (ttsResumeTimer) {
+                clearTimeout(ttsResumeTimer);
+                ttsResumeTimer = null;
+            }
+
+            // TTS가 세그먼트보다 긴 경우, 세그먼트 end_time에 도달했을 때 YouTube 일시정지
+            if (ttsAudio.needsVideoPause && dataType === 'video' && youtubePlayer) {
+                const segmentDuration = segment.end_time - segment.start_time;
+                const ttsActualDuration = ttsAudio.duration / ttsAudio.playbackRate; // 실제 재생 시간
+                const overlapTime = ttsActualDuration - segmentDuration;
+
+                console.log(`[TTS 타이밍] 세그먼트 ${currentSegmentIdx} - 세그먼트 길이: ${segmentDuration.toFixed(2)}s, TTS 실제 시간: ${ttsActualDuration.toFixed(2)}s, 초과: ${overlapTime.toFixed(2)}s`);
+
+                // 세그먼트 end_time에 도달했을 때 YouTube 일시정지하도록 타이머 설정
+                ttsResumeTimer = setTimeout(() => {
+                    // 세그먼트가 끝났는데 TTS가 아직 재생 중이면 YouTube 일시정지
+                    if (!ttsAudio.paused && !ttsAudio.ended && youtubePlayer) {
+                        const remainingTtsTime = (ttsAudio.duration - ttsAudio.currentTime) / ttsAudio.playbackRate;
+                        console.log(`[TTS] 세그먼트 end_time 도달, YouTube 일시정지 (남은 TTS: ${remainingTtsTime.toFixed(2)}s)`);
+                        ttsHasVideoPaused = true;
+                        youtubePlayer.pauseVideo();
+
+                        // TTS 남은 시간만큼만 일시정지
+                        setTimeout(() => {
+                            if (ttsHasVideoPaused && youtubePlayer) {
+                                console.log(`[TTS] TTS 재생 완료 예상 시점, YouTube 다시 재생`);
+                                ttsHasVideoPaused = false;
+                                try {
+                                    youtubePlayer.playVideo();
+                                } catch (err) {
+                                    console.error(`[TTS] YouTube 재생 오류:`, err);
+                                }
+                            }
+                        }, remainingTtsTime * 1000);
+                    }
+                }, segmentDuration * 1000); // 세그먼트 duration 후에 체크
+
+                console.log(`[TTS] YouTube는 계속 재생, ${segmentDuration.toFixed(2)}s 후 TTS 남은 시간만큼 일시정지 예정`);
+            }
+
+            ttsHasVideoPaused = false; // TTS 시작 시점에는 일시정지하지 않음
+
+            ttsAudio.play().then(() => {
+                console.log(`[TTS 타이밍] 세그먼트 ${currentSegmentIdx} 재생 성공! readyState: ${ttsAudio.readyState}, currentTime: ${ttsAudio.currentTime}s`);
+            }).catch(err => {
+                console.error(`[TTS 타이밍] 재생 오류 (세그먼트 ${currentSegmentIdx}):`, err);
+                // 재생 이력 기록
+                ttsPlaybackHistory.push({
+                    segment: currentSegmentIdx,
+                    action: 'play_error',
+                    error: err.toString(),
+                    time: new Date().toISOString()
+                });
+                // TTS 재생 실패 시 YouTube 복구
+                if (ttsAudio.needsVideoPause && dataType === 'video' && youtubePlayer) {
+                    console.log(`[TTS] 재생 실패, YouTube 다시 재생 (세그먼트 ${currentSegmentIdx})`);
+                    try {
+                        ttsHasVideoPaused = false; // 플래그 해제
+                        youtubePlayer.playVideo();
+                    } catch (playErr) {
+                        console.error(`[TTS] YouTube 재생 복구 오류:`, playErr);
+                    }
+                }
             });
             currentTtsSegment = currentSegmentIdx;
-            console.log(`[TTS] 재생 시작: 세그먼트 ${currentSegmentIdx}`);
+            console.log(`[TTS 이벤트] 재생 시작: 세그먼트 ${currentSegmentIdx}`);
+            // 재생 이력 기록
+            ttsPlaybackHistory.push({
+                segment: currentSegmentIdx,
+                action: 'play_start',
+                needsVideoPause: ttsAudio.needsVideoPause,
+                time: new Date().toISOString()
+            });
         } catch (error) {
             console.error(`[TTS] 재생 오류 (세그먼트 ${currentSegmentIdx}):`, error);
         }
@@ -2942,11 +3101,48 @@ function syncTtsWithTime(currentTime, dataType) {
 // 현재 재생 중인 TTS 정지
 function stopCurrentTts() {
     if (currentTtsSegment !== null && ttsAudioElements[currentTtsSegment]) {
-        ttsAudioElements[currentTtsSegment].pause();
-        ttsAudioElements[currentTtsSegment].currentTime = 0;
+        const ttsAudio = ttsAudioElements[currentTtsSegment];
+        ttsAudio.pause();
+        ttsAudio.currentTime = 0;
         console.log(`[TTS] 정지: 세그먼트 ${currentTtsSegment}`);
+
+        // 타이머 취소
+        if (ttsResumeTimer) {
+            clearTimeout(ttsResumeTimer);
+            ttsResumeTimer = null;
+            console.log(`[TTS] 정지 시 타이머 취소`);
+        }
+
+        // TTS가 YouTube를 일시정지시킨 상태였다면 YouTube 복구
+        if (ttsHasVideoPaused && ttsAudio.needsVideoPause && youtubePlayer) {
+            console.log(`[TTS] 정지 시 YouTube 복구 (세그먼트 ${currentTtsSegment})`);
+            ttsHasVideoPaused = false; // 플래그 해제
+            try {
+                youtubePlayer.playVideo();
+            } catch (err) {
+                console.error(`[TTS] YouTube 복구 오류:`, err);
+            }
+        }
+
         currentTtsSegment = null;
     }
 }
 
+// 디버깅용: TTS 재생 이력 출력
+window.showTtsHistory = function() {
+    console.log('=== TTS 재생 이력 ===');
+    console.log(`총 ${ttsPlaybackHistory.length}개 이벤트`);
+    ttsPlaybackHistory.forEach((event, idx) => {
+        console.log(`[${idx}] 세그먼트 ${event.segment}: ${event.action}`, event);
+    });
+    return ttsPlaybackHistory;
+};
+
+// 디버깅용: TTS 재생 이력 초기화
+window.clearTtsHistory = function() {
+    ttsPlaybackHistory = [];
+    console.log('TTS 재생 이력이 초기화되었습니다.');
+};
+
 console.log('✅ TTS 오디오 동기화 로직 로드 완료');
+console.log('💡 디버깅: showTtsHistory() - TTS 재생 이력 확인');

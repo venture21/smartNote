@@ -343,11 +343,12 @@ function renderTranscript() {
     segmentInfo.textContent = `총 ${segments.length}개 세그먼트`;
 }
 
-// 시간 포맷팅 (초 -> MM:SS)
+// 시간 포맷팅 (초 -> H:MM:SS)
 function formatTime(seconds) {
-    const mins = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
 // URL 변경 버튼

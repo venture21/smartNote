@@ -58,15 +58,55 @@ def update_progress(task_id, step, progress, message):
 
 
 def parse_mmss_to_seconds(time_str):
-    """'분:초:밀리초' 형태의 문자열을 초 단위로 변환합니다."""
+    """
+    시간 문자열을 초 단위로 변환합니다.
+    지원 형식:
+    - '시:분:초' (예: "0:05:30" -> 330초, "1:05:30" -> 3930초) - 기본 형식
+    - '시:분:초.밀리초' (예: "0:05:30.200" -> 330.2초) - 하위 호환성
+    - '시:분:초:밀리초' (예: "0:05:30:200" -> 330.2초) - 하위 호환성
+    - '분:초' (예: "5:30" -> 330초)
+    """
     try:
-        parts = time_str.split(":")
-        if len(parts) == 3:
-            minutes = int(parts[0])
-            seconds = int(parts[1])
-            milliseconds = int(parts[2])
-            return minutes * 60 + seconds + milliseconds / 1000.0
+        # 점(.)으로 밀리초 분리
+        if '.' in time_str:
+            main_parts = time_str.split('.')
+            time_parts = main_parts[0]
+            milliseconds = int(main_parts[1]) if len(main_parts) > 1 else 0
+
+            parts = time_parts.split(":")
+            if len(parts) == 3:
+                # 시:분:초.밀리초
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                seconds = int(parts[2])
+                return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000.0
+            elif len(parts) == 2:
+                # 분:초.밀리초
+                minutes = int(parts[0])
+                seconds = int(parts[1])
+                return minutes * 60 + seconds + milliseconds / 1000.0
         else:
-            return 0.0
+            # 밀리초 없는 형식
+            parts = time_str.split(":")
+            if len(parts) == 4:
+                # 시:분:초:밀리초 (하위 호환성)
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                seconds = int(parts[2])
+                milliseconds = int(parts[3])
+                return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000.0
+            elif len(parts) == 3:
+                # 시:분:초 (기본 형식)
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                seconds = int(parts[2])
+                return hours * 3600 + minutes * 60 + seconds
+            elif len(parts) == 2:
+                # 분:초
+                minutes = int(parts[0])
+                seconds = int(parts[1])
+                return minutes * 60 + seconds
+
+        return 0.0
     except:
         return 0.0

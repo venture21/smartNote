@@ -19,7 +19,7 @@ def load_stt_processing_log():
     """STT 처리 시간 로그를 로드합니다."""
     if os.path.exists(config.STT_PROCESSING_LOG):
         try:
-            with open(config.STT_PROCESSING_LOG, 'r', encoding='utf-8') as f:
+            with open(config.STT_PROCESSING_LOG, "r", encoding="utf-8") as f:
                 logs = json.load(f)
             return logs
         except Exception as e:
@@ -32,7 +32,7 @@ def load_stt_processing_log():
 def save_stt_processing_log(logs):
     """STT 처리 시간 로그를 저장합니다."""
     try:
-        with open(config.STT_PROCESSING_LOG, 'w', encoding='utf-8') as f:
+        with open(config.STT_PROCESSING_LOG, "w", encoding="utf-8") as f:
             json.dump(logs, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logging.error(f"STT 로그 저장 오류: {e}")
@@ -47,26 +47,68 @@ def add_stt_processing_record(audio_duration, processing_time, source_type="audi
         processing_time: 실제 처리 시간 (초)
         source_type: 소스 타입 ("audio" 또는 "youtube")
     """
+    import traceback
+    import inspect
+
+    # 검증 1: processing_time이 비정상적으로 큰 경우 (Unix timestamp 오류 등)
+    if processing_time > 10000:
+        # 호출 스택 정보 출력
+        caller_frame = inspect.currentframe().f_back
+        caller_info = inspect.getframeinfo(caller_frame)
+
+        logging.error(
+            f"❌ STT 처리 시간({processing_time:.2f}초)이 비정상적으로 큽니다. "
+            f"Unix timestamp를 잘못 전달했을 가능성이 있습니다. "
+            f"(오디오: {audio_duration:.2f}초, 타입: {source_type})"
+        )
+        logging.error(
+            f"   호출 위치: {caller_info.filename}:{caller_info.lineno} in {caller_info.function}"
+        )
+        logging.error("   호출 스택:")
+        for line in traceback.format_stack()[:-1]:
+            logging.error(f"   {line.strip()}")
+        return
+
+    # 검증 2: processing_time이 1000초를 넘으면 로그에 저장하지 않음
+    if processing_time > 1000:
+        logging.warning(
+            f"⚠️ STT 처리 시간({processing_time:.2f}초)이 1000초를 초과하여 로그에 저장하지 않습니다. "
+            f"(오디오: {audio_duration:.2f}초, 타입: {source_type})"
+        )
+        return
+
+    # 검증 3: processing_time이 audio_duration의 10배를 초과하는 경우
+    if audio_duration > 0 and processing_time > audio_duration * 10:
+        logging.warning(
+            f"⚠️ STT 처리 시간({processing_time:.2f}초)이 오디오 길이({audio_duration:.2f}초)의 10배를 초과하여 로그에 저장하지 않습니다. "
+            f"(비율: {processing_time/audio_duration:.2f}x, 타입: {source_type})"
+        )
+        return
+
     logs = load_stt_processing_log()
 
     # 처리 비율 계산
     ratio = processing_time / audio_duration if audio_duration > 0 else 0
 
     # 새 기록 추가 (더 많은 메타데이터)
-    logs.append({
-        "audio_duration": float(audio_duration),
-        "processing_time": float(processing_time),
-        "ratio": float(ratio),
-        "source_type": source_type,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    })
+    logs.append(
+        {
+            "audio_duration": float(audio_duration),
+            "processing_time": float(processing_time),
+            "ratio": float(ratio),
+            "source_type": source_type,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    )
 
     # 최근 200개만 유지 (더 많은 데이터로 정확도 향상)
     if len(logs) > 200:
         logs = logs[-200:]
 
     save_stt_processing_log(logs)
-    logging.info(f"📊 STT 처리 기록 추가: {audio_duration:.2f}초 → {processing_time:.2f}초 (비율: {ratio:.3f})")
+    logging.info(
+        f"📊 STT 처리 기록 추가: {audio_duration:.2f}초 → {processing_time:.2f}초 (비율: {ratio:.3f})"
+    )
 
 
 # =============================================================================
@@ -142,10 +184,7 @@ def estimate_stt_processing_time(audio_duration):
         stdev_ratio = statistics.stdev(ratios)
 
         # 평균 ± 2 표준편차 범위 내의 값만 사용
-        filtered_ratios = [
-            r for r in ratios
-            if abs(r - mean_ratio) <= 2 * stdev_ratio
-        ]
+        filtered_ratios = [r for r in ratios if abs(r - mean_ratio) <= 2 * stdev_ratio]
 
         if filtered_ratios:
             ratios = filtered_ratios
@@ -179,7 +218,9 @@ def estimate_stt_processing_time(audio_duration):
         estimated = max_estimated_time
 
     # 최소값 제한 (너무 짧으면 비현실적)
-    min_estimated_time = min(5.0, audio_duration * 0.05)  # 최소 5초 또는 오디오 길이의 5%
+    min_estimated_time = min(
+        5.0, audio_duration * 0.05
+    )  # 최소 5초 또는 오디오 길이의 5%
     if estimated < min_estimated_time:
         estimated = min_estimated_time
 
@@ -214,16 +255,16 @@ def analyze_stt_prediction_accuracy():
     if len(logs) < 5:
         return {
             "total_records": len(logs),
-            "message": "데이터가 부족합니다 (최소 5개 필요)"
+            "message": "데이터가 부족합니다 (최소 5개 필요)",
         }
 
     import statistics
 
     # 각 구간별 통계
     stats_by_range = {
-        "short": {"ratios": [], "errors": []},   # 0~5분
+        "short": {"ratios": [], "errors": []},  # 0~5분
         "medium": {"ratios": [], "errors": []},  # 5~15분
-        "long": {"ratios": [], "errors": []}     # 15분 이상
+        "long": {"ratios": [], "errors": []},  # 15분 이상
     }
 
     all_ratios = []
@@ -261,7 +302,7 @@ def analyze_stt_prediction_accuracy():
                 "min_ratio": round(min(all_ratios), 4),
                 "max_ratio": round(max(all_ratios), 4),
             },
-            "by_duration": {}
+            "by_duration": {},
         }
 
         # 구간별 통계
@@ -284,7 +325,4 @@ def analyze_stt_prediction_accuracy():
 
         return result
     else:
-        return {
-            "total_records": len(logs),
-            "message": "유효한 데이터가 없습니다"
-        }
+        return {"total_records": len(logs), "message": "유효한 데이터가 없습니다"}

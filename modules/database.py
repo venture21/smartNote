@@ -94,13 +94,15 @@ def save_youtube_history(df):
     try:
         import json
 
-        for _, row in df.iterrows():
+        for idx, row in df.iterrows():
             # segments_json 파싱
             segments_json_str = row.get('segments_json', '[]')
             if pd.isna(segments_json_str) or segments_json_str == '':
                 segments_json_str = '[]'
 
             segments = json.loads(segments_json_str) if isinstance(segments_json_str, str) else segments_json_str
+
+            logging.info(f"📝 YouTube 저장 시도 (행 {idx}): video_id={row.get('video_id', 'N/A')}, segments={len(segments)}개")
 
             # SQLite에 저장
             sqlite_save_youtube(
@@ -120,7 +122,9 @@ def save_youtube_history(df):
 
         logging.info(f"💾 YouTube 이력 저장 완료: {len(df)}개 항목")
     except Exception as e:
+        import traceback
         logging.error(f"YouTube 이력 저장 오류: {e}")
+        logging.error(f"스택 트레이스:\n{traceback.format_exc()}")
 
 
 def load_audio_history():

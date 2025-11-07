@@ -369,7 +369,22 @@ def estimate_stt_processing_time(audio_duration):
     # 6. 예상 시간 계산
     estimated = audio_duration * weighted_avg_ratio
 
-    # 7. 예측 신뢰도 계산
+    # 7. 예상 시간을 오디오 길이로 제한
+    # STT 처리는 실시간보다 빨라야 하므로, 최대 오디오 길이의 1.5배로 제한
+    max_estimated_time = audio_duration * 1.5
+    if estimated > max_estimated_time:
+        logging.warning(
+            f"⚠️ 예상 시간({estimated:.2f}초)이 오디오 길이({audio_duration:.2f}초)의 1.5배를 초과하여 "
+            f"{max_estimated_time:.2f}초로 제한합니다."
+        )
+        estimated = max_estimated_time
+
+    # 최소값 제한 (너무 짧으면 비현실적)
+    min_estimated_time = min(5.0, audio_duration * 0.05)  # 최소 5초 또는 오디오 길이의 5%
+    if estimated < min_estimated_time:
+        estimated = min_estimated_time
+
+    # 8. 예측 신뢰도 계산
     if len(ratios) >= 3:
         stdev = statistics.stdev(ratios)
         confidence = max(0, 100 - (stdev * 100))  # 표준편차가 낮을수록 신뢰도 높음
@@ -378,7 +393,7 @@ def estimate_stt_processing_time(audio_duration):
 
     logging.info(
         f"⏱️ STT 예상 시간: {estimated:.2f}초 "
-        f"(구간: {duration_range}, 샘플: {len(ratios)}개, "
+        f"(오디오: {audio_duration:.2f}초, 구간: {duration_range}, 샘플: {len(ratios)}개, "
         f"가중평균 비율: {weighted_avg_ratio:.3f}, 신뢰도: {confidence:.0f}%)"
     )
 
@@ -1421,16 +1436,56 @@ def create_token_based_chunks(segments, chunk_size=500, chunk_overlap=100):
 
 
 def parse_mmss_to_seconds(time_str):
-    """'분:초:밀리초' 형태의 문자열을 초 단위로 변환합니다."""
+    """
+    시간 문자열을 초 단위로 변환합니다.
+    지원 형식:
+    - '시:분:초' (예: "0:05:30" -> 330초, "1:05:30" -> 3930초) - 기본 형식
+    - '시:분:초.밀리초' (예: "0:05:30.200" -> 330.2초) - 하위 호환성
+    - '시:분:초:밀리초' (예: "0:05:30:200" -> 330.2초) - 하위 호환성
+    - '분:초' (예: "5:30" -> 330초)
+    """
     try:
-        parts = time_str.split(":")
-        if len(parts) == 3:
-            minutes = int(parts[0])
-            seconds = int(parts[1])
-            milliseconds = int(parts[2])
-            return minutes * 60 + seconds + milliseconds / 1000.0
+        # 점(.)으로 밀리초 분리
+        if '.' in time_str:
+            main_parts = time_str.split('.')
+            time_parts = main_parts[0]
+            milliseconds = int(main_parts[1]) if len(main_parts) > 1 else 0
+
+            parts = time_parts.split(":")
+            if len(parts) == 3:
+                # 시:분:초.밀리초
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                seconds = int(parts[2])
+                return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000.0
+            elif len(parts) == 2:
+                # 분:초.밀리초
+                minutes = int(parts[0])
+                seconds = int(parts[1])
+                return minutes * 60 + seconds + milliseconds / 1000.0
         else:
-            return 0.0
+            # 밀리초 없는 형식
+            parts = time_str.split(":")
+            if len(parts) == 4:
+                # 시:분:초:밀리초 (하위 호환성)
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                seconds = int(parts[2])
+                milliseconds = int(parts[3])
+                return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000.0
+            elif len(parts) == 3:
+                # 시:분:초 (기본 형식)
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                seconds = int(parts[2])
+                return hours * 3600 + minutes * 60 + seconds
+            elif len(parts) == 2:
+                # 분:초
+                minutes = int(parts[0])
+                seconds = int(parts[1])
+                return minutes * 60 + seconds
+
+        return 0.0
     except:
         return 0.0
 
@@ -1779,9 +1834,11 @@ def process_youtube():
                     }
 
                     history_df = load_youtube_history()
-                    history_df = pd.concat(
-                        [history_df, pd.DataFrame([new_row])], ignore_index=True
-                    )
+                    new_df = pd.DataFrame([new_row])
+                    if not history_df.empty:
+                        history_df = pd.concat([history_df, new_df], ignore_index=True)
+                    else:
+                        history_df = new_df
                     save_youtube_history(history_df)
 
                     update_progress(
@@ -1810,9 +1867,11 @@ def process_youtube():
                 }
 
                 history_df = load_youtube_history()
-                history_df = pd.concat(
-                    [history_df, pd.DataFrame([new_row])], ignore_index=True
-                )
+                new_df = pd.DataFrame([new_row])
+                if not history_df.empty:
+                    history_df = pd.concat([history_df, new_df], ignore_index=True)
+                else:
+                    history_df = new_df
                 save_youtube_history(history_df)
 
                 # STT 처리 시간 로그에 기록
@@ -2074,9 +2133,11 @@ def process_audio():
                     }
 
                     history_df = load_audio_history()
-                    history_df = pd.concat(
-                        [history_df, pd.DataFrame([new_row])], ignore_index=True
-                    )
+                    new_df = pd.DataFrame([new_row])
+                    if not history_df.empty:
+                        history_df = pd.concat([history_df, new_df], ignore_index=True)
+                    else:
+                        history_df = new_df
                     save_audio_history(history_df)
 
                     update_progress(
@@ -2103,9 +2164,11 @@ def process_audio():
                 }
 
                 history_df = load_audio_history()
-                history_df = pd.concat(
-                    [history_df, pd.DataFrame([new_row])], ignore_index=True
-                )
+                new_df = pd.DataFrame([new_row])
+                if not history_df.empty:
+                    history_df = pd.concat([history_df, new_df], ignore_index=True)
+                else:
+                    history_df = new_df
                 save_audio_history(history_df)
 
                 # STT 처리 시간 로그에 기록
@@ -3649,87 +3712,125 @@ def generate_tts_background(task_id: str, data_type: str, data_id: str, target_l
             progress_data[task_id]["tts"]["progress"] = progress
             progress_data[task_id]["tts"]["message"] = f"세그먼트 {idx}/{total} 생성 중: {tts_text[:30]}..."
 
-            # TTS 생성
-            try:
-                voice_name = get_voice_for_speaker(speaker_id)
+            # TTS 생성 (재시도 로직 포함)
+            max_retries = 3
+            retry_count = 0
+            tts_success = False
 
-                contents = [
-                    types.Content(
-                        role="user",
-                        parts=[types.Part.from_text(text=tts_text)],
-                    ),
-                ]
+            while retry_count < max_retries and not tts_success:
+                try:
+                    if retry_count > 0:
+                        logging.info(f"🔄 재시도 {retry_count}/{max_retries}: 세그먼트 {idx}")
+                        import time
+                        time.sleep(1)  # 재시도 전 1초 대기
 
-                generate_content_config = types.GenerateContentConfig(
-                    temperature=1,
-                    response_modalities=["audio"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                voice_name=voice_name
+                    voice_name = get_voice_for_speaker(speaker_id)
+
+                    contents = [
+                        types.Content(
+                            role="user",
+                            parts=[types.Part.from_text(text=tts_text)],
+                        ),
+                    ]
+
+                    generate_content_config = types.GenerateContentConfig(
+                        temperature=1,
+                        response_modalities=["audio"],
+                        speech_config=types.SpeechConfig(
+                            voice_config=types.VoiceConfig(
+                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                    voice_name=voice_name
+                                )
                             )
-                        )
-                    ),
-                )
+                        ),
+                    )
 
-                audio_data = b""
-                mime_type = None
+                    audio_data = b""
+                    mime_type = None
+                    chunk_count = 0
+                    finish_reason = None
 
-                for chunk in client.models.generate_content_stream(
-                    model="gemini-2.5-flash-preview-tts",
-                    contents=contents,
-                    config=generate_content_config,
-                ):
-                    if (
-                        chunk.candidates is None
-                        or chunk.candidates[0].content is None
-                        or chunk.candidates[0].content.parts is None
+                    for chunk in client.models.generate_content_stream(
+                        model="gemini-2.5-flash-preview-tts",
+                        contents=contents,
+                        config=generate_content_config,
                     ):
+                        chunk_count += 1
+
+                        # finish_reason 확인
+                        if chunk.candidates and len(chunk.candidates) > 0:
+                            if hasattr(chunk.candidates[0], 'finish_reason'):
+                                finish_reason = chunk.candidates[0].finish_reason
+
+                        if (
+                            chunk.candidates is None
+                            or chunk.candidates[0].content is None
+                            or chunk.candidates[0].content.parts is None
+                        ):
+                            continue
+
+                        if (chunk.candidates[0].content.parts[0].inline_data and
+                            chunk.candidates[0].content.parts[0].inline_data.data):
+                            inline_data = chunk.candidates[0].content.parts[0].inline_data
+                            audio_data += inline_data.data
+                            if mime_type is None:
+                                mime_type = inline_data.mime_type
+
+                    if not audio_data:
+                        logging.error(f"❌ 오디오 데이터가 생성되지 않음")
+                        logging.error(f"   세그먼트 {idx}: speaker={speaker_id}, text_len={len(tts_text)}")
+                        logging.error(f"   텍스트: {tts_text[:100]}...")
+                        logging.error(f"   청크 수: {chunk_count}, finish_reason: {finish_reason}")
+                        retry_count += 1
+                        if retry_count >= max_retries:
+                            fail_count += 1
+                            break
                         continue
+                    else:
+                        # 성공
+                        tts_success = True
+                        break
 
-                    if (chunk.candidates[0].content.parts[0].inline_data and
-                        chunk.candidates[0].content.parts[0].inline_data.data):
-                        inline_data = chunk.candidates[0].content.parts[0].inline_data
-                        audio_data += inline_data.data
-                        if mime_type is None:
-                            mime_type = inline_data.mime_type
-
-                if not audio_data:
-                    logging.error(f"❌ 오디오 데이터가 생성되지 않음")
-                    fail_count += 1
+                except Exception as e:
+                    logging.error(f"❌ TTS API 호출 오류: {e}")
+                    logging.error(f"   세그먼트 {idx}: {tts_text[:100]}...")
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        fail_count += 1
+                        break
                     continue
 
-                # WAV 변환
-                file_extension = mimetypes.guess_extension(mime_type)
-                if file_extension is None or file_extension != ".wav":
-                    audio_data = convert_to_wav(audio_data, mime_type)
-                    # output_path는 이미 .wav로 끝나도록 설정됨 (3579번 줄)
+            if not tts_success:
+                logging.error(f"❌ 세그먼트 {idx} TTS 생성 최종 실패 ({max_retries}번 재시도)")
+                continue
 
-                # 파일 저장
-                with open(output_path, "wb") as f:
-                    f.write(audio_data)
+            # WAV 변환
+            file_extension = mimetypes.guess_extension(mime_type)
+            if file_extension is None or file_extension != ".wav":
+                audio_data = convert_to_wav(audio_data, mime_type)
+                # output_path는 이미 .wav로 끝나도록 설정됨 (3579번 줄)
 
-                # DB 업데이트
-                if data_type == 'youtube':
-                    cursor.execute("""
-                        UPDATE youtube_segments
-                        SET audio_path = ?
-                        WHERE id = ?
-                    """, (output_path, db_id))
-                elif data_type == 'audio':
-                    cursor.execute("""
-                        UPDATE audio_segments
-                        SET audio_path = ?
-                        WHERE id = ?
-                    """, (output_path, db_id))
+            # 파일 저장
+            with open(output_path, "wb") as f:
+                f.write(audio_data)
 
-                conn.commit()
-                success_count += 1
-                logging.info(f"✅ TTS 생성 완료: {output_path} (Voice: {voice_name})")
+            # DB 업데이트
+            if data_type == 'youtube':
+                cursor.execute("""
+                    UPDATE youtube_segments
+                    SET audio_path = ?
+                    WHERE id = ?
+                """, (output_path, db_id))
+            elif data_type == 'audio':
+                cursor.execute("""
+                    UPDATE audio_segments
+                    SET audio_path = ?
+                    WHERE id = ?
+                """, (output_path, db_id))
 
-            except Exception as e:
-                logging.error(f"❌ TTS 생성 오류 (세그먼트 {idx}): {e}")
-                fail_count += 1
+            conn.commit()
+            success_count += 1
+            logging.info(f"✅ TTS 생성 완료: {output_path} (Voice: {voice_name})")
 
         # 완료
         progress_data[task_id]["completed"] = True

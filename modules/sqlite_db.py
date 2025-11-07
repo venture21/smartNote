@@ -26,6 +26,7 @@ def get_db_connection():
     """데이터베이스 연결 컨텍스트 매니저"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row  # 딕셔너리 형태로 결과 반환
+    conn.execute("PRAGMA foreign_keys = ON")  # 외래키 제약조건 활성화
     try:
         yield conn
         conn.commit()
@@ -56,7 +57,8 @@ def init_database():
             stt_service TEXT,
             stt_processing_time REAL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            summary TEXT
+            summary TEXT,
+            original_language TEXT DEFAULT 'unknown'
         )''')
 
         # 오디오 메타데이터 테이블
@@ -71,7 +73,8 @@ def init_database():
             stt_service TEXT,
             stt_processing_time REAL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            summary TEXT
+            summary TEXT,
+            original_language TEXT DEFAULT 'unknown'
         )''')
 
         # 화자 분리 세그먼트 테이블 (YouTube용)
@@ -479,30 +482,40 @@ def delete_youtube_by_video_id(video_id: str) -> Tuple[bool, Optional[str]]:
 
             mp3_path = row['mp3_path']
 
-            # 삭제 전에 TTS 오디오 파일 경로 조회
-            cursor.execute('SELECT audio_path FROM youtube_segments WHERE video_id = ? AND audio_path IS NOT NULL', (video_id,))
-            tts_audio_paths = [row['audio_path'] for row in cursor.fetchall()]
+            # 삭제 전에 TTS 오디오 파일 경로 조회 (컬럼이 있는 경우에만)
+            try:
+                cursor.execute('SELECT audio_path FROM youtube_segments WHERE video_id = ? AND audio_path IS NOT NULL', (video_id,))
+                tts_audio_paths = [row['audio_path'] for row in cursor.fetchall()]
 
-            # TTS 오디오 파일 삭제
-            tts_deleted_count = 0
-            for audio_path in tts_audio_paths:
-                if audio_path and os.path.exists(audio_path):
-                    try:
-                        os.remove(audio_path)
-                        tts_deleted_count += 1
-                        logging.info(f"🗑️ TTS 오디오 파일 삭제: {audio_path}")
-                    except Exception as file_error:
-                        logging.error(f"⚠️ TTS 오디오 파일 삭제 오류: {file_error} (경로: {audio_path})")
+                # TTS 오디오 파일 삭제
+                tts_deleted_count = 0
+                for audio_path in tts_audio_paths:
+                    if audio_path and os.path.exists(audio_path):
+                        try:
+                            os.remove(audio_path)
+                            tts_deleted_count += 1
+                            logging.info(f"🗑️ TTS 오디오 파일 삭제: {audio_path}")
+                        except Exception as file_error:
+                            logging.error(f"⚠️ TTS 오디오 파일 삭제 오류: {file_error} (경로: {audio_path})")
 
-            if tts_deleted_count > 0:
-                logging.info(f"✅ TTS 오디오 파일 {tts_deleted_count}개 삭제 완료")
+                if tts_deleted_count > 0:
+                    logging.info(f"✅ TTS 오디오 파일 {tts_deleted_count}개 삭제 완료")
+            except Exception as e:
+                # audio_path 컬럼이 없는 경우 무시
+                logging.debug(f"TTS 오디오 파일 조회 건너뜀 (컬럼 없음): {e}")
 
-            # 외래키로 CASCADE 설정되어 있어 자동으로 세그먼트도 삭제됨
+            # youtube_segments 먼저 삭제 (외래키 제약조건이 비활성화되어 있을 수 있음)
+            cursor.execute('DELETE FROM youtube_segments WHERE video_id = ?', (video_id,))
+            segments_deleted = cursor.rowcount
+            if segments_deleted > 0:
+                logging.info(f"🗑️ YouTube 세그먼트 {segments_deleted}개 삭제 완료")
+
+            # youtube_metadata 삭제
             cursor.execute('DELETE FROM youtube_metadata WHERE video_id = ?', (video_id,))
-            deleted = cursor.rowcount
+            metadata_deleted = cursor.rowcount
 
-            if deleted > 0:
-                logging.info(f"🗑️ YouTube 영상 삭제 완료: {video_id}")
+            if metadata_deleted > 0:
+                logging.info(f"🗑️ YouTube 메타데이터 삭제 완료: {video_id}")
                 return True, mp3_path
             else:
                 return False, None
@@ -532,30 +545,40 @@ def delete_audio_by_file_hash(file_hash: str) -> Tuple[bool, Optional[str]]:
 
             file_path = row['file_path']
 
-            # 삭제 전에 TTS 오디오 파일 경로 조회
-            cursor.execute('SELECT audio_path FROM audio_segments WHERE file_hash = ? AND audio_path IS NOT NULL', (file_hash,))
-            tts_audio_paths = [row['audio_path'] for row in cursor.fetchall()]
+            # 삭제 전에 TTS 오디오 파일 경로 조회 (컬럼이 있는 경우에만)
+            try:
+                cursor.execute('SELECT audio_path FROM audio_segments WHERE file_hash = ? AND audio_path IS NOT NULL', (file_hash,))
+                tts_audio_paths = [row['audio_path'] for row in cursor.fetchall()]
 
-            # TTS 오디오 파일 삭제
-            tts_deleted_count = 0
-            for audio_path in tts_audio_paths:
-                if audio_path and os.path.exists(audio_path):
-                    try:
-                        os.remove(audio_path)
-                        tts_deleted_count += 1
-                        logging.info(f"🗑️ TTS 오디오 파일 삭제: {audio_path}")
-                    except Exception as file_error:
-                        logging.error(f"⚠️ TTS 오디오 파일 삭제 오류: {file_error} (경로: {audio_path})")
+                # TTS 오디오 파일 삭제
+                tts_deleted_count = 0
+                for audio_path in tts_audio_paths:
+                    if audio_path and os.path.exists(audio_path):
+                        try:
+                            os.remove(audio_path)
+                            tts_deleted_count += 1
+                            logging.info(f"🗑️ TTS 오디오 파일 삭제: {audio_path}")
+                        except Exception as file_error:
+                            logging.error(f"⚠️ TTS 오디오 파일 삭제 오류: {file_error} (경로: {audio_path})")
 
-            if tts_deleted_count > 0:
-                logging.info(f"✅ TTS 오디오 파일 {tts_deleted_count}개 삭제 완료")
+                if tts_deleted_count > 0:
+                    logging.info(f"✅ TTS 오디오 파일 {tts_deleted_count}개 삭제 완료")
+            except Exception as e:
+                # audio_path 컬럼이 없는 경우 무시
+                logging.debug(f"TTS 오디오 파일 조회 건너뜀 (컬럼 없음): {e}")
 
-            # 외래키로 CASCADE 설정되어 있어 자동으로 세그먼트도 삭제됨
+            # audio_segments 먼저 삭제 (외래키 제약조건이 비활성화되어 있을 수 있음)
+            cursor.execute('DELETE FROM audio_segments WHERE file_hash = ?', (file_hash,))
+            segments_deleted = cursor.rowcount
+            if segments_deleted > 0:
+                logging.info(f"🗑️ 오디오 세그먼트 {segments_deleted}개 삭제 완료")
+
+            # audio_metadata 삭제
             cursor.execute('DELETE FROM audio_metadata WHERE file_hash = ?', (file_hash,))
-            deleted = cursor.rowcount
+            metadata_deleted = cursor.rowcount
 
-            if deleted > 0:
-                logging.info(f"🗑️ 오디오 파일 삭제 완료: {file_hash}")
+            if metadata_deleted > 0:
+                logging.info(f"🗑️ 오디오 메타데이터 삭제 완료: {file_hash}")
                 return True, file_path
             else:
                 return False, None
