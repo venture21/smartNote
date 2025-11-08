@@ -89,5 +89,110 @@
     "ratio": 0.3612091357984346,
     "source_type": "youtube",
     "timestamp": "2025-11-08 01:02:22"
+  },
+  {
+    "audio_duration": 823.008,
+    "processing_time": 128.706116437912,
+    "ratio": 0.15638501258543291,
+    "source_type": "youtube",
+    "timestamp": "2025-11-08 01:41:39"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 64.56756281852722,
+    "ratio": 0.05409952175669396,
+    "source_type": "youtube",
+    "timestamp": "2025-11-08 01:54:04"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 182.50678396224976,
+    "ratio": 0.1529178011172637,
+    "source_type": "youtube",
+    "timestamp": "2025-11-08 02:13:20"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 171.64143872261047,
+    "ratio": 0.14381400417145132,
+    "source_type": "youtube",
+    "timestamp": "2025-11-08 02:21:41"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 165.64904022216797,
+    "ratio": 0.13879312559251808,
+    "source_type": "youtube",
+    "timestamp": "2025-11-08 02:29:39"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 181.62112522125244,
+    "ratio": 0.1521757301417453,
+    "source_type": "youtube",
+    "timestamp": "2025-11-08 02:36:30"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 150.99054884910583,
+    "ratio": 0.1265111477953054,
+    "source_type": "youtube",
+    "timestamp": "2025-11-08 03:14:48"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 190.94869136810303,
+    "ratio": 0.15999106102417018,
+    "source_type": "youtube",
+    "timestamp": "2025-11-08 03:33:19"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 157.91832494735718,
+    "ratio": 0.13231575551770358,
+    "source_type": "youtube",
+    "timestamp": "2025-11-08 23:56:07"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 293.8517780303955,
+    "ratio": 0.24621094501397198,
+    "source_type": "youtube",
+    "timestamp": "2025-11-09 00:14:26"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 162.7306969165802,
+    "ratio": 0.1363479198225886,
+    "source_type": "youtube",
+    "timestamp": "2025-11-09 00:28:58"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 141.86355757713318,
+    "ratio": 0.11886387350869476,
+    "source_type": "youtube",
+    "timestamp": "2025-11-09 00:45:47"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 232.39195227622986,
+    "ratio": 0.19471531724968483,
+    "source_type": "youtube",
+    "timestamp": "2025-11-09 00:58:06"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 244.7475299835205,
+    "ratio": 0.2050677421487131,
+    "source_type": "youtube",
+    "timestamp": "2025-11-09 01:06:32"
+  },
+  {
+    "audio_duration": 1193.496,
+    "processing_time": 228.48812413215637,
+    "ratio": 0.19144439875136268,
+    "source_type": "youtube",
+    "timestamp": "2025-11-09 01:12:35"
   }
 ]

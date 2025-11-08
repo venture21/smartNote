@@ -66,6 +66,7 @@ document.getElementById('youtubeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const youtubeUrl = document.getElementById('youtubeUrl').value.trim();
+    const sttApi = document.getElementById('videoSttApi').value;
     const chunkDuration = parseInt(document.getElementById('videoChunkDuration').value);
 
     if (!youtubeUrl) {
@@ -99,6 +100,7 @@ document.getElementById('youtubeForm').addEventListener('submit', async (e) => {
             },
             body: JSON.stringify({
                 youtube_url: youtubeUrl,
+                stt_api: sttApi,
                 chunk_duration: chunkDuration
             })
         });
@@ -1149,10 +1151,12 @@ document.getElementById('audioForm').addEventListener('submit', async (e) => {
         return;
     }
 
+    const sttApi = document.getElementById('audioSttApi').value;
     const chunkDuration = parseInt(document.getElementById('audioChunkDuration').value);
 
     const formData = new FormData();
     formData.append('audio_file', selectedAudioFile);
+    formData.append('stt_api', sttApi);
     formData.append('chunk_duration', chunkDuration);
 
     document.getElementById('audioUploadStatus').innerHTML = '<p style="color: #666;">처리 중...</p>';

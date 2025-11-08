@@ -59,6 +59,21 @@
                         </div>
 
                         <div class="form-group" style="margin-top: 16px;">
+                            <label for="videoSttApi">🔧 STT API 선택</label>
+                            <select
+                                id="videoSttApi"
+                                name="stt_api"
+                                style="width: 100%; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem; background: white;"
+                            >
+                                <option value="google_ai_studio" selected>Google AI Studio (권장)</option>
+                                <option value="vertex_ai">Vertex AI</option>
+                            </select>
+                            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;">
+                                💡 Google AI Studio는 무료 API 키로 사용 가능. Vertex AI는 GCP 프로젝트가 필요합니다.
+                            </p>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 16px;">
                             <label for="videoChunkDuration">🔪 오디오 분할 시간 (긴 파일 처리용)</label>
                             <select
                                 id="videoChunkDuration"
@@ -284,6 +299,21 @@
                                 <strong>파일 형식:</strong>
                                 <span id="fileType">-</span>
                             </div>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 16px;">
+                            <label for="audioSttApi">🔧 STT API 선택</label>
+                            <select
+                                id="audioSttApi"
+                                name="stt_api"
+                                style="width: 100%; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem; background: white;"
+                            >
+                                <option value="google_ai_studio" selected>Google AI Studio (권장)</option>
+                                <option value="vertex_ai">Vertex AI</option>
+                            </select>
+                            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;">
+                                💡 Google AI Studio는 무료 API 키로 사용 가능. Vertex AI는 GCP 프로젝트가 필요합니다.
+                            </p>
                         </div>
 
                         <div class="form-group" style="margin-top: 16px;">

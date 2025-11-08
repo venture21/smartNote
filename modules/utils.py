@@ -62,31 +62,34 @@ def parse_mmss_to_seconds(time_str):
     시간 문자열을 초 단위로 변환합니다.
     지원 형식:
     - '시:분:초' (예: "0:05:30" -> 330초, "1:05:30" -> 3930초) - 기본 형식
-    - '시:분:초.밀리초' (예: "0:05:30.200" -> 330.2초) - 하위 호환성
+    - '시:분:초.백분의1초' (예: "0:05:30.23" -> 330.23초, "1:05:30.45" -> 3930.45초) - 소수점 2자리
     - '시:분:초:밀리초' (예: "0:05:30:200" -> 330.2초) - 하위 호환성
     - '분:초' (예: "5:30" -> 330초)
+    - '분:초.백분의1초' (예: "5:30.23" -> 330.23초)
     """
     try:
-        # 점(.)으로 밀리초 분리
+        # 점(.)으로 소수 부분 분리
         if '.' in time_str:
             main_parts = time_str.split('.')
             time_parts = main_parts[0]
-            milliseconds = int(main_parts[1]) if len(main_parts) > 1 else 0
+            # 소수 부분을 백분의 1초로 처리 (예: "23" -> 0.23초)
+            fractional_part = ("0." + main_parts[1]) if len(main_parts) > 1 else "0.0"
+            fractional_seconds = float(fractional_part)
 
             parts = time_parts.split(":")
             if len(parts) == 3:
-                # 시:분:초.밀리초
+                # 시:분:초.백분의1초
                 hours = int(parts[0])
                 minutes = int(parts[1])
                 seconds = int(parts[2])
-                return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000.0
+                return hours * 3600 + minutes * 60 + seconds + fractional_seconds
             elif len(parts) == 2:
-                # 분:초.밀리초
+                # 분:초.백분의1초
                 minutes = int(parts[0])
                 seconds = int(parts[1])
-                return minutes * 60 + seconds + milliseconds / 1000.0
+                return minutes * 60 + seconds + fractional_seconds
         else:
-            # 밀리초 없는 형식
+            # 소수 없는 형식
             parts = time_str.split(":")
             if len(parts) == 4:
                 # 시:분:초:밀리초 (하위 호환성)

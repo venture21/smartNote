@@ -1617,9 +1617,12 @@ def process_youtube():
     캐싱 기능 포함.
     """
     try:
+        from config import DEFAULT_STT_API, DEFAULT_CHUNK_DURATION
+
         data = request.get_json()
         youtube_url = data.get("youtube_url", "").strip()
-        chunk_duration = data.get("chunk_duration", 30)  # 기본값 30분
+        stt_api = data.get("stt_api", DEFAULT_STT_API)  # config.py의 기본값 사용
+        chunk_duration = data.get("chunk_duration", DEFAULT_CHUNK_DURATION)  # config.py의 기본값 사용
 
         if not youtube_url:
             return (
@@ -1816,7 +1819,8 @@ def process_youtube():
                     task_id=task_id,
                     audio_duration=audio_duration,
                     chunk_duration_minutes=chunk_duration,
-                    overlap_seconds=25
+                    overlap_seconds=25,
+                    api_type=stt_api
                 )
 
                 # 결과 파싱 (tuple 형태: segments, processing_time, detected_language)
@@ -1956,8 +1960,11 @@ def process_audio():
     캐싱 기능 포함.
     """
     try:
-        # 청크 duration 받기
-        chunk_duration = int(request.form.get("chunk_duration", 30))  # 기본값 30분
+        from config import DEFAULT_STT_API, DEFAULT_CHUNK_DURATION
+
+        # API 타입 및 청크 duration 받기
+        stt_api = request.form.get("stt_api", DEFAULT_STT_API)  # config.py의 기본값 사용
+        chunk_duration = int(request.form.get("chunk_duration", DEFAULT_CHUNK_DURATION))  # config.py의 기본값 사용
 
         # 파일 확인
         if "audio_file" not in request.files:
@@ -2127,7 +2134,8 @@ def process_audio():
                     task_id=task_id,
                     audio_duration=audio_duration,
                     chunk_duration_minutes=chunk_duration,
-                    overlap_seconds=25
+                    overlap_seconds=25,
+                    api_type=stt_api
                 )
 
                 # 결과 파싱 (tuple 형태: segments, processing_time, detected_language)

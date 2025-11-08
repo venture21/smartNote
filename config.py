@@ -45,6 +45,14 @@ for folder in [MP4_FOLDER, MP3_FOLDER, CSV_FOLDER, UPLOADS_FOLDER, CHROMA_DB_FOL
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# Vertex AI 설정
+VERTEX_AI_PROJECT_ID = os.getenv("VERTEX_AI_PROJECT_ID")  # GCP 프로젝트 ID
+VERTEX_AI_LOCATION = os.getenv("VERTEX_AI_LOCATION", "us-central1")  # 기본 위치
+
+# STT API 설정
+DEFAULT_STT_API = "google_ai_studio"  # 기본 API: "google_ai_studio" 또는 "vertex_ai"
+AVAILABLE_STT_APIS = ["google_ai_studio", "vertex_ai"]
+
 # STT 청크 처리 설정
 DEFAULT_CHUNK_DURATION = 30  # 기본 청크 길이 (분)
 CHUNK_OVERLAP_SECONDS = 25  # 청크 간 중복 시간 (초)
